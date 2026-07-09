@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Planning Présence — Version Vercel
 
-## Getting Started
+Migration du projet Google Apps Script vers **Next.js 16** + **PostgreSQL** + **Auth.js**, hébergé sur Vercel.
 
-First, run the development server:
+L'archive d'origine (GAS) est figée dans `../PlanningGS`.
+
+## Stack
+
+| Couche | Technologie |
+|--------|-------------|
+| Framework | Next.js 16 (App Router) |
+| UI | React 19, Tailwind CSS 4 |
+| Base de données | PostgreSQL via Prisma 7 |
+| Auth | Auth.js (NextAuth v5) — Google + login dev |
+| Hébergement | Vercel |
+
+## Démarrage local
+
+### 1. Variables d'environnement
+
+```bash
+cp .env.example .env
+```
+
+Configurer `DATABASE_URL` (Neon recommandé : [neon.tech](https://neon.tech)) et `AUTH_SECRET`.
+
+### 2. Base de données
+
+```bash
+npm install
+npm run db:push
+npm run db:seed
+```
+
+### 3. Lancer l'app
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ouvrir [http://localhost:3000](http://localhost:3000). En dev, utiliser **Connexion dev (admin)** sur `/login`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Déploiement Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Créer un projet Vercel lié à ce dépôt
+2. Ajouter les variables d'environnement :
+   - `DATABASE_URL`
+   - `AUTH_SECRET`
+   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (production)
+3. Build command (recommandé) :
 
-## Learn More
+```bash
+prisma generate && prisma db push && next build
+```
 
-To learn more about Next.js, take a look at the following resources:
+Ou utiliser `prisma migrate deploy` si vous versionnez les migrations.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4. Après le premier déploiement, exécuter le seed (localement pointé vers la DB prod, ou via script CI) :
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run db:seed
+```
 
-## Deploy on Vercel
+## Fonctionnalités migrées
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Authentification et rôles utilisateurs
+- Référentiel personnel (import CSV)
+- Vue équipe hebdomadaire avec filtres REAP / quart
+- Vue individuelle (calendrier mensuel, saisie des statuts)
+- Interface mobile simplifiée (`/mobile`)
+- Calcul automatique des quarts (2×8, 3×8, 9×10, journée)
+- Permissions de modification par rôle
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## À venir (hors scope initial)
+
+- Module indicateurs / graphiques
+- Module capacité (Capa) avec spreadsheet externe
+- Impression PDF hebdomadaire
+- Génération annuelle batch
+- i18n EN/PT complet
+
+## Structure
+
+```
+src/
+  app/           # Routes et API
+  components/    # UI partagée
+  lib/           # Logique métier (shifts, team, permissions...)
+  generated/     # Client Prisma (généré)
+prisma/          # Schéma DB
+scripts/seed.ts  # Import CSV personnel
+_legacy-export/  # Fichiers txt/csv d'origine (référence)
+```
+
+## Archive GAS
+
+Ne pas modifier `../PlanningGS`. C'est la version Google Apps Script de référence.

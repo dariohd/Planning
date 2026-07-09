@@ -1,0 +1,3437 @@
+/**  * [NOUVELLE FONCTION D'OPTIMISATION] Trouve l'index d'une ligne en ne lisant que 
+  * les colonnes A et B pour des performances maximales. 
+  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet La feuille dans laquelle chercher. 
+  * @param {string} key1 La valeur à trouver dans la colonne A (personnelId). 
+  * @param {number | string} key2 La valeur à trouver dans la colonne B (year). 
+  * @returns {number} L'index de la ligne (commençant à 1), ou -1 si non trouvée. 
+  */ 
+ function _findPresenceRowIndex(sheet, key1, key2) { 
+   // Si la feuille n'a qu'un en-tête ou est vide, inutile de chercher. 
+   if (sheet.getLastRow() < 2) return -1;  
+    
+   // On ne lit QUE les deux premières colonnes, ce qui est extrêmement rapide. 
+   const indexData = sheet.getRange(1, 1, sheet.getLastRow(), 2).getValues(); 
+    
+   // On commence à i = 1 pour sauter l'en-tête. 
+   for (let i = 1; i < indexData.length; i++) { 
+     // On utilise '==' pour la comparaison de l'année, car elle peut être stockée comme texte ou nombre. 
+     if (indexData[i][0] === key1 && indexData[i][1] == key2) { 
+       return i + 1; // L'index du tableau est base 0, on retourne un index de feuille base 1. 
+     } 
+   } 
+    
+   return -1; // Non trouvé 
+ } 
+
+ /**  * Tente de récupérer des données depuis le cache. Si non présentes, 
+  * exécute la fonction pour les obtenir, les met en cache, et les retourne. 
+  * @param {string} key La clé unique pour cet élément de cache. 
+  * @param {number} expirationInSeconds La durée de vie du cache en secondes. 
+  * @param {function} dataFetchingFunction La fonction à appeler pour obtenir les données si elles ne sont pas dans le cache. 
+  * @returns {*} Les données (depuis le cache ou fraîchement récupérées). 
+  */ 
+ function getOrSetCache(key, expirationInSeconds, dataFetchingFunction) { 
+   const cache = CacheService.getScriptCache(); 
+   const cachedData = cache.get(key); 
+   if (cachedData != null) { 
+     Logger.log(`Cache HIT pour la clé: ${key}`); 
+     return JSON.parse(cachedData); 
+   } 
+    
+   Logger.log(`Cache MISS pour la clé: ${key}. Récupération des données...`); 
+   const freshData = dataFetchingFunction(); 
+   // On ne met en cache que si les données sont valides (pas d'erreur) 
+   if (freshData && freshData.error === undefined) { 
+     cache.put(key, JSON.stringify(freshData), expirationInSeconds); 
+   } 
+   return freshData; 
+ } 
+
+function _calculateShiftForDate(person, targetDate) {
+   if (!person || !person.typeQuart) return null;
+
+   if (person.typeQuart === 'Journée') {
+     return 'J';
+   }
+
+   // --- AJOUT : GESTION DU 9*10 ---
+   if (person.typeQuart === '9*10') {
+     const cycle = ['SC', 'SL']; // Semaine Courte, Semaine Longue
+     if (cycle.indexOf(person.quartDefaut) === -1) return null;
+
+     const shiftIndex = cycle.indexOf(person.quartDefaut);
+     
+     // Calcul du nombre de semaines écoulées depuis le début de l'année
+     const year = targetDate.getFullYear();
+     const firstDayOfYear = new Date(Date.UTC(year, 0, 1));
+     const firstMondayOfYear = new Date(firstDayOfYear);
+     const dayOfWeek = firstDayOfYear.getUTCDay();
+     const dateOffset = (dayOfWeek === 0) ? 1 : 1 - dayOfWeek;
+     firstMondayOfYear.setUTCDate(firstDayOfYear.getUTCDate() + dateOffset);
+
+     const weeksPassed = Math.floor((targetDate.getTime() - firstMondayOfYear.getTime()) / (1000 * 60 * 60 * 24 * 7));
+     
+     if (weeksPassed < 0) return person.quartDefaut;
+
+     const currentShiftIndex = (shiftIndex + weeksPassed) % cycle.length;
+     return cycle[currentShiftIndex]; // Retourne 'SC' ou 'SL'
+   }
+   // -------------------------------
+
+   if (person.typeQuart === '2*8' || person.typeQuart === '3*8') {
+      // ... (votre code existant pour 2*8 et 3*8 reste ici inchangé) ...
+      let cycle = [];
+if (person.typeQuart === '3*8') cycle = ['M', 'N', 'A'];
+else if (person.typeQuart === '2*8') cycle = ['M', 'A'];
+else if (person.typeQuart === '9*10') cycle = ['SC', 'SL'];
+else if (person.typeQuart === '9*10 Portugal') cycle = ['M', 'M', 'M', 'A', 'A', 'A'];
+else if (person.typeQuart === 'Nuit Portugal') cycle = ['N'];
+     // Si le quart par défaut n'est pas dans le cycle (ex: 'J'), on ne peut pas calculer. 
+     if (cycle.indexOf(person.quartDefaut) === -1) return null;  
+
+     const shiftIndex = cycle.indexOf(person.quartDefaut); 
+      
+     // Ancre stable : On utilise le premier lundi de l'année comme point de référence. 
+     const year = targetDate.getFullYear(); 
+     const firstDayOfYear = new Date(Date.UTC(year, 0, 1)); 
+     const firstMondayOfYear = new Date(firstDayOfYear); 
+     const dayOfWeek = firstDayOfYear.getUTCDay(); // Dimanche = 0, Lundi = 1... 
+     // Si le 1er janvier est un mardi (2), on recule de 1 jour. Si c'est un dimanche (0), on avance de 1 jour. 
+     const dateOffset = (dayOfWeek === 0) ? 1 : 1 - dayOfWeek; 
+     firstMondayOfYear.setUTCDate(firstDayOfYear.getUTCDate() + dateOffset); 
+
+     // On calcule le nombre de semaines complètes passées depuis cette ancre. 
+     const weeksPassed = Math.floor((targetDate.getTime() - firstMondayOfYear.getTime()) / (1000 * 60 * 60 * 24 * 7)); 
+      
+     if (weeksPassed < 0) return person.quartDefaut; // Pour les dates avant la première semaine de l'année 
+
+     const currentShiftIndex = (shiftIndex + weeksPassed) % cycle.length; 
+     return cycle[currentShiftIndex]; 
+   } 
+    
+   return null; 
+ } 
+
+ /**  * ================================================================================= 
+  * Backend COMPLET et OPTIMISÉ pour la gestion du planning de présence. 
+  * Version finale utilisant une structure de données "large" pour des 
+  * performances et une fiabilité maximales. 
+  * @version 6.0 - Optimisation massive des lectures & corrections de logique 
+  * ================================================================================= 
+  */ 
+
+ // --- CONFIGURATION --- 
+ const SPREADSHEET_ID = "1lOIHGW5sYdQ5hSPEfYBuFC8uSsY-wk2haAjaS8iEuvc"; 
+ const FEUILLE_PERSONNEL = "Personnel"; 
+ const FEUILLE_PRESENCES = "Présences_Optimisées"; 
+ const LAST_MODIFIED_KEY = 'lastModified'; 
+
+// --- FONCTION DE DÉMARRAGE DE L'APPLICATION WEB --- 
+function doGet(e) { 
+  // On vérifie si l'URL contient "?mode=mobile"
+  const mode = e.parameter.mode;
+  
+  let templateName = 'Index'; // Fichier par défaut (Bureau)
+  let title = "Planning Présence - Bureau";
+
+  if (mode === 'mobile') {
+    templateName = 'MobileIndex'; // Nouveau fichier pour le mobile
+    title = "Planning Mobile 🚀";
+  }
+
+  return HtmlService.createTemplateFromFile(templateName) 
+    .evaluate() 
+    .setTitle(title) 
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'); 
+    // Le 'user-scalable=no' donne un vrai feeling d'app native en empêchant le zoom accidentel
+}
+
+function _updateLastModified() { 
+   const newTimestamp = new Date().getTime().toString(); 
+   PropertiesService.getScriptProperties().setProperty(LAST_MODIFIED_KEY, newTimestamp); 
+   
+   const cache = CacheService.getScriptCache(); 
+   // On vide tous les types de caches du personnel
+   cache.remove('personnel_data_false'); 
+   cache.remove('personnel_data_true'); 
+   cache.remove('personnel_data'); // Ancienne clé par sécurité
+   
+   return newTimestamp; 
+}
+
+ // --- API INTERNE (Fonctions appelées depuis le Javascript de la page) --- 
+
+function getInitialData(mode = 'production') { 
+   try { 
+     // Une seule déclaration ici : on récupère tout le monde (incluant archivés) 
+     // pour que la vue individuelle puisse basculer.
+     const personnel = _getPersonnelForMode(mode, true); 
+
+     const userEmail = Session.getActiveUser().getEmail(); 
+     const userRole = _getUserRole(userEmail); 
+     if (userRole === 'Non Autorisé') {
+         throw new Error("Veuillez contacter un administrateur pour avoir accès au fichier.");
+     }
+     const userName = _getUserNameFromEmail(userEmail);
+          
+     const currentUser = { 
+         email: userEmail, 
+         name: userName, 
+         role: userRole 
+     }; 
+
+     const settings = getConfiguration(); 
+
+     let chefsEquipeFiltres = []; 
+     if (mode === 'support') { 
+       const managerRoles = ['RP', 'Responsable Preparateur', 'Responsable Qualité']; 
+       chefsEquipeFiltres = personnel 
+         .filter(p => managerRoles.includes(p.role)) 
+         .map(p => ({
+             name: `${p.prenom} ${p.nom}`,
+             role: p.role
+         }));
+     } else {  
+       const managerRoles = ['REAP', 'Pilote'];
+       chefsEquipeFiltres = personnel
+         .filter(p => managerRoles.includes(p.role))
+         .map(p => ({ 
+             name: `${p.prenom} ${p.nom}`, 
+             role: p.role 
+           }));
+     }
+
+     // Listes pour les formulaires
+     const rpListForForm = personnel 
+       .filter(p => p.role === "RP") 
+       .map(p => ({ id: p.id, name: `${p.prenom} ${p.nom}` })); 
+
+     const reapListForForm = personnel 
+       .filter(p => p.role === "REAP") 
+       .map(p => ({ id: p.id, name: `${p.prenom} ${p.nom}` })); 
+
+     const respPrepListForForm = personnel 
+       .filter(p => p.role === "Responsable Preparateur") 
+       .map(p => ({ id: p.id, name: `${p.prenom} ${p.nom}` })); 
+
+     const respQualiteListForForm = personnel 
+       .filter(p => p.role === "Responsable Qualité") 
+       .map(p => ({ id: p.id, name: `${p.prenom} ${p.nom}` })); 
+
+     const lastModified = PropertiesService.getScriptProperties().getProperty(LAST_MODIFIED_KEY); 
+
+     return { 
+        currentUser: currentUser, 
+        personnel: personnel, 
+        chefsEquipe: chefsEquipeFiltres.sort((a, b) => a.name.localeCompare(b.name)), 
+        rpList: rpListForForm.sort((a, b) => a.name.localeCompare(b.name)), 
+        reapListForForm: reapListForForm.sort((a, b) => a.name.localeCompare(b.name)), 
+        respPrepList: respPrepListForForm.sort((a, b) => a.name.localeCompare(b.name)), 
+        respQualiteList: respQualiteListForForm.sort((a, b) => a.name.localeCompare(b.name)), 
+        lastModified: lastModified || new Date().getTime().toString(), 
+        settings: settings 
+      };
+   } catch (e) { 
+     Logger.log(`Erreur getInitialData: ${e.stack}`); 
+     return { error: e.message }; 
+   } 
+}
+
+ function checkForUpdates(clientLastModified) { 
+   const serverLastModified = PropertiesService.getScriptProperties().getProperty(LAST_MODIFIED_KEY); 
+   if (!clientLastModified || (serverLastModified && Number(serverLastModified) > Number(clientLastModified))) { 
+     // N'envoie les nouvelles données que si nécessaire pour alléger la charge 
+     return { hasChanges: true, newData: getInitialData() }; 
+   } 
+   return { hasChanges: false }; 
+ } 
+
+ /**
+ * [MODIFIÉ v2] Sauvegarde les données ou met à jour un existant.
+ * @param {object} data (incluant `startDate` qui peut être `null`).
+ */
+function savePersonnel(data) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(FEUILLE_PERSONNEL);
+    if (!sheet) throw new Error(`Feuille "${FEUILLE_PERSONNEL}" introuvable.`);
+    
+    const tauxEff = data.tauxEfficacite !== undefined ? data.tauxEfficacite : 100;
+    
+    const rowData = [
+      data.matricule, data.nom, data.prenom, data.role,
+      data.chefEquipeAssocie || '', data.section || '',
+      data.typeQuart, data.quartDefaut, data.posteDeTravail || '', data.mftAssocie || '',
+      data.responsableHierarchique || ''
+    ];
+    
+    let result;
+    if (data.id) { // Mise à jour
+      const allData = sheet.getRange("A:A").getValues().flat();
+      const rowIndex = allData.indexOf(data.id);
+      if (rowIndex === -1) throw new Error("Personnel non trouvé.");
+      
+      const oldRowValues = sheet.getRange(rowIndex + 1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      const oldTypeQuart = oldRowValues[7];
+      const oldQuartDefaut = oldRowValues[8];
+      
+      sheet.getRange(rowIndex + 1, 2, 1, 11).setValues([rowData]);
+      sheet.getRange(rowIndex + 1, 14).setValue(tauxEff); // Colonne N pour le taux
+      
+      result = { ...data, id: data.id };
+      const quartDataChanged = (oldTypeQuart !== data.typeQuart || oldQuartDefaut !== data.quartDefaut);
+      const newDateProvided = (data.startDate !== null);
+      
+      if (quartDataChanged || newDateProvided) _regenerateFutureSchedule(data, data.startDate);
+      
+    } else { // Création
+      const newId = Utilities.getUuid();
+      sheet.appendRow([newId, ...rowData, 'Actif', tauxEff]);
+      populateInitialSchedule(newId, data.typeQuart, data.quartDefaut, data.startDate);
+      result = { id: newId, ...data };
+    }
+    
+    _updateLastModified();
+    return result;
+  } catch (e) {
+    return { error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+ function deletePersonnel(personnelId) { 
+     const lock = LockService.getScriptLock(); 
+     lock.waitLock(30000); 
+     try { 
+         // --- VÉRIFICATION DES DROITS --- 
+         const userRole = _getUserRole(Session.getActiveUser().getEmail()); 
+         if (userRole !== 'Administrateur') { 
+             throw new Error("Accès refusé. Seul un administrateur peut supprimer du personnel."); 
+         } 
+         // --- FIN DE LA VÉRIFICATION --- 
+         const ss = SpreadsheetApp.openById(SPREADSHEET_ID); 
+          
+         const personnelSheet = ss.getSheetByName(FEUILLE_PERSONNEL); 
+         const personnelIds = personnelSheet.getRange("A:A").getValues().flat(); 
+         const rowIndexPersonnel = personnelIds.indexOf(personnelId); 
+         if (rowIndexPersonnel !== -1) { 
+             personnelSheet.deleteRow(rowIndexPersonnel + 1); 
+         } 
+
+         const presencesSheet = ss.getSheetByName(FEUILLE_PRESENCES); 
+         if (presencesSheet.getLastRow() > 1) { 
+             // --- OPTIMISATION : On ne lit que la colonne A pour trouver les lignes à supprimer. 
+             const presencesIndexData = presencesSheet.getRange(2, 1, presencesSheet.getLastRow() - 1, 1).getValues(); 
+             const rowsToDelete = []; 
+             presencesIndexData.forEach((row, index) => { 
+                 if (row[0] === personnelId) { 
+                     rowsToDelete.push(index + 2); // index 0 = ligne 2 
+                 } 
+             }); 
+
+             if (rowsToDelete.length > 0) { 
+                 rowsToDelete.sort((a, b) => b - a); // Trier en ordre décroissant 
+                 rowsToDelete.forEach(rowIndex => { 
+                     presencesSheet.deleteRow(rowIndex); 
+                 }); 
+             } 
+         } 
+
+         _updateLastModified(); 
+         Logger.log(`Personnel et toutes ses présences supprimés : ID ${personnelId}`); 
+         return { success: true }; 
+     } catch (e) { 
+         Logger.log(`Erreur deletePersonnel: ${e.stack}`); 
+         return { error: e.message }; 
+     } finally { 
+         lock.releaseLock(); 
+     } 
+ } 
+
+
+/**
+ * Récupère le personnel. 
+ * @param {boolean} includeArchived Si faux (défaut), ne renvoie que les actifs.
+ */
+function getPersonnel(includeArchived = false) {
+  return getOrSetCache('personnel_data_' + includeArchived, 600, () => {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(FEUILLE_PERSONNEL);
+    if (!sheet || sheet.getLastRow() < 2) return [];
+    
+    // On lit désormais 14 colonnes (jusqu'à N)
+    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14).getValues();
+    let filteredData = data.filter(row => row && row[0]);
+    if (!includeArchived) {
+      filteredData = filteredData.filter(row => row[12] !== 'Archivé');
+    }
+    return filteredData.map(row => ({
+      id: row[0], matricule: row[1], nom: row[2], prenom: row[3], role: row[4],
+      chefEquipeAssocie: row[5], section: row[6], typeQuart: row[7],
+      quartDefaut: row[8], posteDeTravail: row[9] || '', mftAssocie: row[10] || '',
+      responsableHierarchique: row[11] || '',
+      statut: row[12] || 'Actif',
+      tauxEfficacite: row[13] !== undefined && row[13] !== '' ? Number(row[13]) : 100 // <-- NOUVEAU
+    }));
+  });
+}
+
+function toggleArchiveView() {
+    state.showArchived = !state.showArchived;
+    const btn = document.getElementById('toggle-archive-btn');
+    
+    if (state.showArchived) {
+        btn.classList.remove('text-gray-500', 'bg-white');
+        btn.classList.add('text-white', 'bg-amber-500', 'border-amber-600');
+        showToast("Affichage du personnel ARCHIVÉ");
+    } else {
+        btn.classList.add('text-gray-500', 'bg-white');
+        btn.classList.remove('text-white', 'bg-amber-500', 'border-amber-600');
+        showToast("Affichage du personnel ACTIF");
+    }
+    
+    renderPersonnelList();
+}
+
+/**
+ * [NOUVELLE FONCTION] Archive une personne au lieu de la supprimer.
+ */
+function archivePersonnel(personnelId) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const userRole = _getUserRole(Session.getActiveUser().getEmail()); 
+    if (userRole !== 'Administrateur') throw new Error("Accès refusé."); 
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID); 
+    const sheet = ss.getSheetByName(FEUILLE_PERSONNEL); 
+    const data = sheet.getRange("A:A").getValues().flat();
+    const rowIndex = data.indexOf(personnelId);
+
+    if (rowIndex !== -1) {
+      // On marque "Archivé" dans la colonne M (13)
+      sheet.getRange(rowIndex + 1, 13).setValue('Archivé');
+      _updateLastModified();
+      return { success: true };
+    }
+    throw new Error("Personnel non trouvé.");
+  } catch (e) {
+    return { error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+ /**  * [OPTIMISÉ] Récupère les présences pour un utilisateur sur une année. 
+  * Lit une seule ligne dans la feuille optimisée grâce à une recherche d'index rapide. 
+  */ 
+ function getPresencesForYear(personnelId, year) { 
+  try { 
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID); 
+    const sheet = ss.getSheetByName(FEUILLE_PRESENCES); 
+    if (!sheet) return {}; 
+
+    // Utilisation de la nouvelle fonction pour trouver la ligne SANS tout lire. 
+    const rowIndex = _findPresenceRowIndex(sheet, personnelId, year); 
+    if (rowIndex === -1) { 
+        return {}; // Si la ligne n'existe pas, on retourne un objet vide. 
+    } 
+     
+    // On ne lit que la ligne qui nous intéresse. 
+    const userRow = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0]; 
+
+    const presences = {}; 
+    if (userRow) { 
+      for (let month = 0; month < 12; month++) { // Colonnes C à N (index 2 à 13) 
+        const monthDataStr = userRow[2 + month]; 
+        if (monthDataStr) { 
+          const monthData = JSON.parse(monthDataStr); 
+          for (const day in monthData) { 
+            const dateKey = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`; 
+            presences[dateKey] = monthData[day]; 
+          } 
+        } 
+      } 
+    } 
+    return presences; 
+  } catch (e) { 
+    Logger.log(`Erreur getPresencesForYear: ${e.stack}`); 
+    return { error: `Erreur serveur: ${e.message}` }; 
+  } 
+ } 
+
+
+function setPresence(personnelId, dateStr, statut, loc = null) { 
+     const lock = LockService.getScriptLock(); 
+     lock.waitLock(30000); 
+     try { 
+         _ensureModificationIsAllowed(Session.getActiveUser().getEmail(), personnelId); 
+
+         const ss = SpreadsheetApp.openById(SPREADSHEET_ID); 
+         const sheet = ss.getSheetByName(FEUILLE_PRESENCES); 
+         if (!sheet) throw new Error(`Feuille "${FEUILLE_PRESENCES}" introuvable.`); 
+         
+         const dateObj = new Date(dateStr); 
+         const year = dateObj.getFullYear(); 
+         const monthIndex = dateObj.getMonth(); 
+         const day = dateObj.getDate().toString(); 
+         
+         let rowIndex = _findPresenceRowIndex(sheet, personnelId, year); 
+
+         if (rowIndex === -1) { 
+             const newRowData = Array(14).fill(''); 
+             newRowData[0] = personnelId; 
+             newRowData[1] = year; 
+             sheet.appendRow(newRowData); 
+             rowIndex = sheet.getLastRow(); 
+         } 
+
+         const monthCol = monthIndex + 3; 
+         const range = sheet.getRange(rowIndex, monthCol); 
+         const monthDataStr = range.getValue(); 
+         const monthData = monthDataStr ? JSON.parse(monthDataStr) : {}; 
+         const dayData = monthData[day] || {}; 
+
+         // --- NOUVELLE LOGIQUE D'ENREGISTREMENT MISSIONS ---
+         if (statut === '') { 
+             delete dayData.s;
+             delete dayData.loc; // On efface la localisation si on vide la case
+         } else { 
+             dayData.s = statut;
+             if (loc) dayData.loc = loc; // On enregistre le lieu
+             else delete dayData.loc;
+         } 
+
+         if (Object.keys(dayData).length === 0) { 
+             delete monthData[day]; 
+         } else { 
+             monthData[day] = dayData; 
+         } 
+         
+         const newMonthDataStr = Object.keys(monthData).length > 0 ? JSON.stringify(monthData) : ''; 
+         range.setValue(newMonthDataStr); 
+         
+         const newTimestamp = _updateLastModified(); 
+         return { success: true, newTimestamp: newTimestamp }; 
+
+     } catch(e) { 
+         Logger.log(`Erreur setPresence: ${e.stack}`); 
+         return { error: e.message }; 
+     } finally { 
+         lock.releaseLock(); 
+     } 
+}
+
+/**
+ * [MODIFIÉ] Remplit le planning initial pour un nouveau membre du personnel
+ * à partir d'une date de début spécifique.
+ * @param {string} personnelId L'ID de la personne.
+ * @param {string} typeQuart Le type de quart (Journée, 2*8, 3*8).
+ * @param {string} quartDefaut Le quart de la semaine de démarrage (M, A, N, J).
+ * @param {string | null} startDateStr La date de début au format YYYY-MM-DD (optionnelle).
+ */
+function populateInitialSchedule(personnelId, typeQuart, quartDefaut, startDateStr = null) {
+   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+   const sheet = ss.getSheetByName(FEUILLE_PRESENCES);
+   
+   // --- DÉBUT DE LA MODIFICATION ---
+   const today = new Date(); // Gardé pour le cas par défaut
+
+   let startDate;
+   if (startDateStr) {
+     // On utilise la date fournie, en s'assurant qu'elle est en UTC
+     // (le split/map gère le format "YYYY-MM-DD")
+     startDate = new Date(Date.UTC(...startDateStr.split('-').map((n, i) => i === 1 ? parseInt(n) - 1 : parseInt(n))));
+   } else {
+     // Comportement par défaut (si aucune date n'est fournie) : on commence aujourd'hui (en UTC)
+     startDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+   }
+   
+   const year = startDate.getFullYear(); // L'année de référence est celle de la date de début
+   const endOfYear = new Date(Date.UTC(year, 11, 31)); // On génère jusqu'à la fin de cette année
+   // --- FIN DE LA MODIFICATION ---
+   
+   // --- AJOUT : On récupère les jours fériés de l'année ---
+   const holidays = getHolidaysForYear(year);
+
+   const yearlyData = Array(12).fill(0).map(() => ({}));  
+
+   const data = sheet.getDataRange().getValues();
+   const existingRowIndex = data.findIndex(row => row[0] === personnelId && row[1] == year);
+   if (existingRowIndex !== -1) {
+       Logger.log(`Le planning pour ${personnelId} en ${year} existe déjà. Annulation de la création.`);
+       return;
+   } 
+
+   // Remplacez la ligne de déclaration du cycle par :
+let cycle = [];
+if (typeQuart === '3*8') cycle = ['M', 'N', 'A'];
+else if (typeQuart === '2*8') cycle = ['M', 'A'];
+else if (typeQuart === '9*10') cycle = ['SC', 'SL'];
+else if (typeQuart === '9*10 Portugal') cycle = ['M', 'M', 'M', 'A', 'A', 'A'];
+else if (typeQuart === 'Nuit Portugal') cycle = ['N'];
+   const shiftIndex = Math.max(0, cycle.indexOf(quartDefaut));
+   
+   // --- MODIFICATION : On utilise "startDate" au lieu de "today" ---
+   const mondayOfStartWeek = new Date(startDate.getTime());
+   mondayOfStartWeek.setUTCDate(startDate.getUTCDate() - (startDate.getUTCDay() || 7) + 1); // On utilise setUTCDate
+
+   // --- MODIFICATION : La boucle commence à "startDate" ---
+   for (let d = new Date(startDate.getTime()); d <= endOfYear; d.setUTCDate(d.getUTCDate() + 1)) {
+     let potentialShift = null;
+     let shouldWork = false;
+     const dayOfWeek = d.getUTCDay(); // Dimanche = 0, Lundi = 1...
+
+     if (typeQuart === 'Journée') {
+         potentialShift = 'J';
+      } else {
+         // Le calcul générique fonctionne maintenant pour 9*10 grâce au cycle défini
+         const weeksPassed = Math.floor((d.getTime() - mondayOfStartWeek.getTime()) / (1000 * 60 * 60 * 24 * 7));
+         const effectiveWeeksPassed = weeksPassed < 0 ? 0 : weeksPassed;
+         const currentShiftIndex = (shiftIndex + effectiveWeeksPassed) % cycle.length;
+         potentialShift = cycle[currentShiftIndex];
+      }
+      
+      if (!potentialShift) continue;
+
+      // --- MODIFICATION DU SWITCH ---
+      switch (potentialShift) {
+         case 'J': case 'M':
+             if (dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+             break;
+         case 'A':
+            if (typeQuart === '2*8' && dayOfWeek >= 1 && dayOfWeek <= 4) shouldWork = true;
+            // 3*8 ET 9*10 Portugal travaillent 5 jours en Après-Midi
+            else if (['3*8', '9*10 Portugal'].includes(typeQuart) && dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+            break;
+            
+        case 'N':
+            if (['2*8', '3*8'].includes(typeQuart) && dayOfWeek >= 1 && dayOfWeek <= 4) shouldWork = true;
+            // Nuit Portugal travaille 5 jours en Nuit
+            else if (typeQuart === 'Nuit Portugal' && dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+            break;
+         // NOUVEAUX CAS
+         case 'SC': // Semaine Courte : Lundi(1) à Jeudi(4)
+             if (dayOfWeek >= 1 && dayOfWeek <= 4) shouldWork = true;
+             potentialShift = 'J'; // On écrit 'J' dans la cellule, pas 'SC'
+             break;
+         case 'SL': // Semaine Longue : Lundi(1) à Vendredi(5)
+             if (dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+             potentialShift = 'J'; // On écrit 'J' dans la cellule
+             break;
+     } 
+     
+     // --- MODIFICATION : On vérifie si le jour est férié avant de placer le statut ---
+     const dateKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+     const isHoliday = !!holidays[dateKey];
+
+     if (shouldWork && !isHoliday) {
+       const monthIndex = d.getUTCMonth();
+       const dayKeyStr = d.getUTCDate().toString();
+       yearlyData[monthIndex][dayKeyStr] = { s: potentialShift };
+     }
+   }
+
+   const newRow = [personnelId, year, ...yearlyData.map(monthData => Object.keys(monthData).length > 0 ? JSON.stringify(monthData) : '')];
+   sheet.appendRow(newRow);
+   Logger.log(`Planning initial optimisé généré pour ${personnelId} pour l'année ${year}, à partir du ${startDate.toISOString().slice(0, 10)}.`);
+} 
+
+/**
+ * [MODIFIÉ v3 - CORRIGÉ] Regénère le planning d'une personne à partir d'une date d'effet.
+ * PREND EN COMPTE LA DATE D'EFFET, MÊME SI ELLE EST DANS LE PASSÉ.
+ * Utilise le "quartDefaut" comme ancre pour la SEMAINE de la date d'effet.
+ * @param {object} person L'objet personnel complet et mis à jour.
+ * @param {string | null} startDateStr La date d'effet (YYYY-MM-DD).
+ */
+function _regenerateFutureSchedule(person, startDateStr = null) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000); // Attend jusqu'à 30s
+
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(FEUILLE_PRESENCES);
+    if (!sheet) return;
+
+    // --- 1. Préparation des dates et du cycle ---
+    const today = new Date();
+    const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+    
+    // --- DÉBUT DE LA CORRECTION ---
+    // On détermine la date de début effective.
+    let effectiveStartDate;
+    if (startDateStr) {
+        // On utilise la date fournie par l'utilisateur, quelle qu'elle soit.
+        effectiveStartDate = new Date(Date.UTC(...startDateStr.split('-').map((n, i) => i === 1 ? parseInt(n) - 1 : parseInt(n))));
+        Logger.log(`Date d'effet fournie : ${effectiveStartDate.toISOString()}`);
+    } else {
+        // On utilise "aujourd'hui" SEULEMENT si aucune date n'est fournie.
+        effectiveStartDate = todayUTC;
+        Logger.log(`Aucune date d'effet fournie, utilisation de "aujourd'hui" : ${effectiveStartDate.toISOString()}`);
+    }
+    
+    // L'année de référence est celle de la date d'effet
+    const year = effectiveStartDate.getFullYear();
+    // --- FIN DE LA CORRECTION ---
+
+    // --- Logique de Cycle (basée sur la date d'effet) ---
+    let cycle = [];
+if (person.typeQuart === '3*8') cycle = ['M', 'N', 'A'];
+else if (person.typeQuart === '2*8') cycle = ['M', 'A'];
+else if (person.typeQuart === '9*10') cycle = ['SC', 'SL'];
+else if (person.typeQuart === '9*10 Portugal') cycle = ['M', 'M', 'M', 'A', 'A', 'A'];
+else if (person.typeQuart === 'Nuit Portugal') cycle = ['N'];
+    const shiftIndex = Math.max(0, cycle.indexOf(person.quartDefaut));
+    
+    // On trouve le Lundi de la semaine de la date d'effet. C'est notre ancre.
+    const mondayOfStartWeek = new Date(effectiveStartDate.getTime());
+    mondayOfStartWeek.setUTCDate(effectiveStartDate.getUTCDate() - (effectiveStartDate.getUTCDay() || 7) + 1);
+    // --- Fin Logique de Cycle ---
+
+    // Statuts à préserver
+    const statusesToPreserve = new Set(['CET', 'CP', '4HCP', 'JRTT', 'Abs', 'RF', 'Ma', 'LMa', 'F', '4HF', 'P', 'Z', 'S', 'D', 'Ecole']);
+    const holidays = getHolidaysForYear(year);
+
+    let rowIndex = _findPresenceRowIndex(sheet, person.id, year);
+
+    // Si la ligne pour cette année n'existe pas (ex: on modifie 2026 en 2025)
+    if (rowIndex === -1) {
+      Logger.log(`Aucun planning trouvé pour ${person.prenom} ${person.nom} pour l'année ${year}.`);
+      
+      // On crée le planning pour cette année en utilisant la bonne logique
+      // (populateInitialSchedule gère déjà la date de début correctement)
+      Logger.log(`Création d'un nouveau planning pour ${year} (commençant à ${startDateStr}) car il n'existait pas.`);
+      populateInitialSchedule(person.id, person.typeQuart, person.quartDefaut, startDateStr);
+      
+      // La regénération n'est pas nécessaire car populate l'a déjà fait.
+      return; 
+    }
+
+    // --- 2. Lecture et modification des mois ---
+    // On commence au mois de la date d'effet
+    const startMonthIndex = effectiveStartDate.getMonth(); // 0-11
+    const numMonthsToRead = 12 - startMonthIndex; 
+    const firstColToRead = startMonthIndex + 3; // Colonne C = index 3
+    
+    const monthlyRanges = sheet.getRange(rowIndex, firstColToRead, 1, numMonthsToRead);
+    const monthlyDataValues = monthlyRanges.getValues()[0]; 
+
+    // On boucle sur chaque mois à partir de la date d'effet
+    for (let i = 0; i < monthlyDataValues.length; i++) {
+      const currentMonthIndex = startMonthIndex + i; // Le vrai index du mois (0-11)
+      let monthData = monthlyDataValues[i] ? JSON.parse(monthlyDataValues[i]) : {};
+      let hasChanged = false;
+
+      const daysInMonth = new Date(Date.UTC(year, currentMonthIndex + 1, 0)).getUTCDate();
+      // Le premier jour à modifier est soit le 1er, soit le jour de la date d'effet
+      const startDay = (currentMonthIndex === effectiveStartDate.getMonth()) ? effectiveStartDate.getDate() : 1;
+
+      // On boucle sur chaque jour (à partir du startDay)
+      for (let day = startDay; day <= daysInMonth; day++) {
+        const currentDate = new Date(Date.UTC(year, currentMonthIndex, day));
+        const dayStr = String(day);
+        const existingStatus = monthData[dayStr]?.s;
+
+        // On ne modifie que si le statut n'est PAS un statut à préserver
+        if (!statusesToPreserve.has(existingStatus)) {
+          const dateKey = currentDate.toISOString().slice(0, 10);
+          const isHoliday = !!holidays[dateKey];
+          const dayOfWeek = currentDate.getUTCDay();
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+          // Si c'est un weekend ou un jour férié, on efface
+          if (isWeekend || isHoliday) {
+            if (monthData[dayStr] && monthData[dayStr].s) {
+              delete monthData[dayStr].s;
+              if (Object.keys(monthData[dayStr]).length === 0) delete monthData[dayStr];
+              hasChanged = true;
+            }
+          } else {
+            // Sinon, c'est un jour travaillé, on calcule le nouveau quart
+            let potentialShift = null;
+            if (person.typeQuart === 'Journée') {
+                potentialShift = 'J';
+            } else if (cycle.length > 0) {
+                // On calcule les semaines passées depuis l'ancre (lundi de la date d'effet)
+                const weeksPassed = Math.floor((currentDate.getTime() - mondayOfStartWeek.getTime()) / (1000 * 60 * 60 * 24 * 7));
+                const effectiveWeeksPassed = weeksPassed < 0 ? 0 : weeksPassed;
+                const currentShiftIndex = (shiftIndex + effectiveWeeksPassed) % cycle.length;
+                potentialShift = cycle[currentShiftIndex];
+            }
+            
+// On applique les règles métier
+          let shouldWork = false;
+          
+          if (potentialShift) {
+            const typeQuart = person.typeQuart; // 👇 AJOUTE CETTE LIGNE ICI
+
+            switch (potentialShift) {
+              case 'J': case 'M':
+                if (dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+                break;
+              case 'A':
+                if (typeQuart === '2*8' && dayOfWeek >= 1 && dayOfWeek < 4)
+                  shouldWork = true;
+                // 3*8 ET 9*10 Portugal travaillent 5 jours en Après-Midi
+                else if (['3*8', '9*10 Portugal'].includes(typeQuart) && dayOfWeek >= 1 && dayOfWeek <= 5) 
+                  shouldWork = true;
+                break;
+              case 'N':
+            if (['2*8', '3*8'].includes(typeQuart) && dayOfWeek >= 1 && dayOfWeek <= 4) shouldWork = true;
+            // Nuit Portugal travaille 5 jours en Nuit
+            else if (typeQuart === 'Nuit Portugal' && dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+            break;
+                case 'SC':
+                   if (dayOfWeek >= 1 && dayOfWeek <= 4) shouldWork = true;
+                   potentialShift = 'J'; // IMPORTANT : On transforme le statut interne en statut affichable
+                   break;
+               case 'SL':
+                   if (dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+                   potentialShift = 'J';
+                   break;    
+              }
+            }
+
+            // On met à jour le planning
+            if (shouldWork && potentialShift) {
+              if (!monthData[dayStr]) monthData[dayStr] = {};
+              if (monthData[dayStr].s !== potentialShift) {
+                monthData[dayStr].s = potentialShift;
+                hasChanged = true;
+              }
+            } else { // Ce jour n'est plus travaillé, on supprime
+              if (monthData[dayStr] && monthData[dayStr].s) {
+                delete monthData[dayStr].s;
+                if (Object.keys(monthData[dayStr]).length === 0) delete monthData[dayStr];
+                hasChanged = true;
+              }
+            }
+          }
+        }
+      } // fin boucle jours
+
+      // On met à jour la donnée du mois (en mémoire)
+      if (hasChanged) {
+        monthlyDataValues[i] = Object.keys(monthData).length > 0 ? JSON.stringify(monthData) : '';
+      }
+    } // fin boucle mois
+
+    // --- 3. Écriture des modifications (en batch) ---
+    // On écrit toutes les nouvelles valeurs des mois en une seule fois
+    monthlyRanges.setValues([monthlyDataValues]); 
+    Logger.log(`Regénération du planning pour ${person.id} à partir de ${effectiveStartDate.toISOString()} terminée.`);
+
+  } catch (e) {
+    Logger.log(`Erreur lors de la regénération du planning pour ${person.id}: ${e.stack}`);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+ // Remplacez la fonction getTeamPresencesForMonth existante par celle-ci
+
+/** * [MODIFIÉ POUR QUART DE TRAVAIL] Récupère les présences pour un groupe de personnes sur un mois. 
+ * @param {string} mode Le mode d'application ('production' ou 'support').
+ * @param {string|Array<string>} selection La ou les sélections de l'utilisateur. 
+ * @param {string} dateStr La date au format YYYY-MM. 
+ * @param {string | null} shiftFilter Le filtre de quart de travail ('M', 'A', 'N') ou null.
+ */ 
+function getTeamPresencesForMonth(mode, selection, dateStr, shiftFilter) { 
+    try { 
+        if (!selection || !dateStr) return { error: "Paramètres invalides." }; 
+
+        const allPersonnelForMode = _getPersonnelForMode(mode); 
+        
+        // On détermine le lundi de la semaine en cours pour servir de référence au calcul de quart
+        const today = new Date(); 
+        const dayIndex = today.getUTCDay(); 
+        const diffToMonday = today.getDate() - dayIndex + (dayIndex === 0 ? -6 : 1); 
+        const referenceMonday = new Date(today.getFullYear(), today.getMonth(), diffToMonday, 12, 0, 0); 
+        
+        // Étape 1 : Déterminer les membres de l'équipe. 
+        // On récupère toutes les données de présence pour l'année du mois sélectionné pour 
+        // que _getTeamMembers_Optimized puisse déterminer les quarts réels.
+        const [year, monthNum] = dateStr.split('-').map(Number);
+        const allPersonnelIds = allPersonnelForMode.map(p => p.id);
+        const allPresencesData = _fetchPresenceDataForUsers(allPersonnelIds, [year]);
+        const allPresencesMap = new Map();
+        allPresencesData.forEach(row => { 
+            allPresencesMap.set(`${row[0]}-${row[1]}`, row); 
+        });
+
+        // Utilisation de la version optimisée pour appliquer le filtre de quart
+        const teamMembers = _getTeamMembers_Optimized(selection, referenceMonday, allPersonnelForMode, allPresencesMap, shiftFilter); 
+
+        if (teamMembers.length === 0) return { presences: {}, personnel: [] }; 
+
+        const teamIds = teamMembers.map(p => p.id); 
+
+        // Étape 2 : Récupérer les données de présence UNIQUEMENT pour les membres de l'équipe et l'année concernée. 
+        // Nous lisons à nouveau, mais cette fois seulement pour les membres filtrés, ce qui est très rapide.
+        const relevantRows = _fetchPresenceDataForUsers(teamIds, [year]); 
+
+        // Étape 3 : Traiter les données ciblées (logique existante) 
+        const teamPresences = {}; 
+        teamIds.forEach(id => { teamPresences[id] = {}; }); 
+        
+        relevantRows.forEach(row => { 
+            const personnelId = row[0]; 
+            const monthDataStr = row[monthNum - 1 + 2]; // Colonne C = index 2 
+            if (monthDataStr) { 
+                try { 
+                    const monthData = JSON.parse(monthDataStr); 
+                    for (const day in monthData) { 
+                        const dateKey = `${year}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`; 
+                        if (teamPresences[personnelId]) { 
+                            teamPresences[personnelId][dateKey] = monthData[day]; 
+                        } 
+                    } 
+                } catch (e) { /* Ignorer les erreurs de parsing */ } 
+            } 
+        }); 
+
+        return { presences: teamPresences, personnel: teamMembers }; 
+
+    } catch (e) { 
+        Logger.log(`Erreur critique dans getTeamPresencesForMonth: ${e.stack}`); 
+        return { error: e.message }; 
+    } 
+}
+
+ /**  * [CORRIGÉ] Récupère le planning hebdomadaire. Le nom de l'équipe est maintenant plus flexible. 
+  */ 
+ function getWeeklyTeamSchedule(teamSelection, weekStartDateStr) { 
+   try { 
+     const allPersonnel = getPersonnel(); 
+      
+     // Simplification : le nom de l'équipe est simplement la sélection. 
+     // La logique complexe de filtrage est déjà dans _getTeamMembers. 
+     const teamName = teamSelection.replace(' (REAP)', '').replace(' (RP)', ''); 
+      
+     const referenceMonday = new Date(weekStartDateStr + 'T12:00:00Z'); 
+     const teamMembers = _getTeamMembers(teamSelection, referenceMonday, allPersonnel); 
+      
+     // Le reste de la fonction est inchangé... 
+     const schedule = {}; 
+     const memberIds = teamMembers.map(m => m.id); 
+     memberIds.forEach(id => schedule[id] = {}); 
+
+     const weekDatesISO = Array.from({ length: 7 }, (_, i) => { 
+       const d = new Date(referenceMonday.getTime()); 
+       d.setUTCDate(referenceMonday.getUTCDate() + i); 
+       return d.toISOString().slice(0, 10); 
+     }); 
+     const yearsInWeek = [...new Set(weekDatesISO.map(dStr => parseInt(dStr.substring(0, 4))))]; 
+      
+     const relevantRows = _fetchPresenceDataForUsers(memberIds, yearsInWeek); 
+      
+     weekDatesISO.forEach(dateStr => { 
+       const date = new Date(dateStr + 'T12:00:00Z'); 
+       const year = date.getFullYear(); 
+       const monthIndex = date.getMonth(); 
+       const day = date.getDate().toString(); 
+
+       relevantRows.forEach(row => { 
+         const personnelId = row[0]; 
+         if (Number(row[1]) == year) { 
+           const monthDataStr = row[monthIndex + 2]; 
+           if (monthDataStr) { 
+             try { 
+               const monthData = JSON.parse(monthDataStr); 
+               if (monthData[day]) { 
+                 schedule[personnelId][dateStr] = monthData[day].s || ''; 
+               } 
+             } catch(e) { /* Ignorer erreur parsing */ } 
+           } 
+         } 
+       }); 
+     }); 
+
+     return { teamName: teamName, weekDates: weekDatesISO, schedule, teamMembers, error: null }; 
+   } catch (e) { 
+     Logger.log(`Erreur getWeeklyTeamSchedule: ${e.stack}`); 
+     return { error: e.message }; 
+   } 
+ } 
+
+
+ // Remplacez la fonction generatePrintableWeeklySchedule existante par celle-ci
+
+// On ajoute "lang = 'fr'" dans les paramètres
+function generatePrintableWeeklySchedule(selections, weekStartDateStr, shiftFilter = null, lang = 'fr') {
+  try {
+    const selectionsArray = Array.isArray(selections) ? selections : [selections];
+    
+    if (selectionsArray.length === 0) {
+      return '<html><body><h3>Sélection invalide</h3><p>Veuillez sélectionner au moins une équipe à imprimer.</p></body></html>';
+    }
+
+    const allPersonnel = getPersonnel();
+    const referenceMonday = new Date(weekStartDateStr + 'T12:00:00Z');
+
+    const allIds = allPersonnel.map(p => p.id);
+    const yearsInWeek = [...new Set(Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(referenceMonday.getTime());
+      d.setUTCDate(referenceMonday.getUTCDate() + i);
+      return d.getUTCFullYear();
+    }))];
+
+    const allPresencesData = _fetchPresenceDataForUsers(allIds, yearsInWeek);
+    const allPresencesMap = new Map();
+    allPresencesData.forEach(row => {
+      allPresencesMap.set(`${row[0]}-${row[1]}`, row);
+    });
+
+    const schedulesToPrint = [];
+    for (const selection of selectionsArray) {
+      const data = getWeeklyTeamSchedule_Optimized(selection, weekStartDateStr, allPersonnel, allPresencesMap, shiftFilter);
+      if (data && !data.error && data.teamMembers.length > 0) {
+        schedulesToPrint.push(data);
+      }
+    }
+
+    if (schedulesToPrint.length === 0) {
+      return '<html><body><h3>Aucune donnée à imprimer</h3><p>Aucun membre trouvé pour la sélection et le quart de travail choisi.</p></body></html>';
+    }
+
+    const template = HtmlService.createTemplateFromFile('PrintableSchedule');
+    template.schedules = schedulesToPrint;
+    template.lang = lang; // <-- On passe la langue au fichier HTML
+
+    // Traduction dynamique des dates
+    template.formatDate = function(dateStr) {
+      const date = new Date(dateStr + 'T12:00:00Z');
+      let days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']; // FR par défaut
+      if (lang === 'en') days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      if (lang === 'pt') days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      return `${days[date.getUTCDay()]} ${d}/${m}`;
+    };
+
+    return template.evaluate().getContent();
+
+    } catch (e) { 
+        Logger.log(`Erreur generatePrintableWeeklySchedule: ${e.stack}`); 
+        return `<html><body><h3>Erreur Serveur</h3><p>${e.message}</p></body></html>`; 
+    } 
+}
+
+function getIndicatorsData(mode = 'production', selectedDateStr, teamSelection = 'Tous') { 
+   try { 
+     const dateToUse = selectedDateStr || new Date().toISOString().slice(0, 10); 
+     
+     // --- MODIFICATION ICI : On filtre le personnel dès le début ---
+     const referenceDate = new Date(dateToUse + 'T12:00:00Z');
+     const rawPersonnel = _getPersonnelForMode(mode); 
+     
+     // On utilise votre fonction _getTeamMembers pour filtrer selon le REAP choisi
+     const allPersonnel = _getTeamMembers(teamSelection, referenceDate, rawPersonnel);
+     // --------------------------------------------------------------
+
+     // Définition des libellés (le reste de votre code reste identique...)
+     let labels, group1Roles, group2Roles; 
+     if (mode === 'support') {
+       labels = { group1: 'Encadrement', group2: 'Support & Apprentis' }; 
+       group1Roles = ['RP', 'REAP', 'MFT', 'Responsable Preparateur', 'Responsable Qualité']; 
+       group2Roles = ['Apprenti', 'Préparateur', 'Qualité']; 
+     } else { 
+       labels = { group1: 'Compagnons', group2: 'Intérimaires' }; 
+       // MODIFIÉ : Assurez-vous que 'Apprenti Atelier' n'est pas ici
+       group1Roles = ['Compagnon', 'Pilote']; 
+       // MODIFIÉ : Assurez-vous que 'Apprenti Atelier' n'est pas ici
+       group2Roles = ['Intérimaire']; 
+     }
+
+     if (allPersonnel.length === 0) { 
+       const emptyStats = () => ({ presence: [], Ma: [], LMa: [], CP: [], Abs: [], F: [], RF: [] }); 
+       return { 
+         compagnons: { daily: emptyStats(), weekly: emptyStats(), monthly: emptyStats(), yearly: emptyStats() }, 
+         interimaires: { daily: emptyStats(), weekly: emptyStats(), monthly: emptyStats(), yearly: emptyStats() }, 
+         sectionHeadcount: { theoretical: {}, presentToday: {} }, 
+         workstationHeadcount: { theoretical: {}, presentToday: {} }, 
+         monthlyAbsenceBreakdown: {}, 
+         weekBoundaries: { start: '', end: '' }, 
+         workforceTotals: { compagnons: 0, interimaires: 0, total: 0 }, 
+         labels: labels 
+       }; 
+     } 
+
+     let totalGroup1 = 0; 
+     let totalGroup2 = 0; 
+     allPersonnel.forEach(p => { 
+       if (group1Roles.includes(p.role)) totalGroup1++; 
+       else if (group2Roles.includes(p.role)) totalGroup2++; 
+     }); 
+
+     const [y, m, d] = dateToUse.split('-').map(Number); 
+     const selectedDateObj = new Date(Date.UTC(y, m - 1, d)); 
+     const targetYear = selectedDateObj.getUTCFullYear(); 
+     const targetMonth = selectedDateObj.getUTCMonth(); 
+     const targetDay = selectedDateObj.getUTCDate().toString(); 
+     const dayOfWeek = selectedDateObj.getUTCDay(); 
+
+     // --- CORRECTION : Déclaration unique de la liste des IDs --- 
+     const personnelIds = allPersonnel.map(p => p.id); 
+     // On utilise cette liste pour la lecture ciblée 
+     const allPresencesData = _fetchPresenceDataForUsers(personnelIds, [targetYear]); 
+
+     const weekStartDate = new Date(selectedDateObj); 
+     weekStartDate.setUTCDate(selectedDateObj.getUTCDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); 
+     const weekEndDate = new Date(weekStartDate); 
+     weekEndDate.setUTCDate(weekStartDate.getUTCDate() + 6); 
+
+     const createPeriodStats = () => ({ presence: [], M: [], A: [], N: [], J: [], Mi: [], Ma: [], LMa: [], CP: [], Abs: [], F: [], RF: [], '4HF': [], D: [], P: [], S: [], Z: [], Ecole: [] });
+     const indicators = { 
+       compagnons: { daily: createPeriodStats(), weekly: createPeriodStats(), monthly: createPeriodStats(), yearly: createPeriodStats() }, 
+       interimaires: { daily: createPeriodStats(), weekly: createPeriodStats(), monthly: createPeriodStats(), yearly: createPeriodStats() }, 
+       sectionHeadcount: { theoretical: {}, presentToday: {} }, 
+       workstationHeadcount: { theoretical: {}, presentToday: {} }, 
+       monthlyAbsenceBreakdown: {}, 
+       weekBoundaries: { start: weekStartDate.toISOString().slice(0, 10), end: weekEndDate.toISOString().slice(0, 10) }, 
+       workforceTotals: { compagnons: totalGroup1, interimaires: totalGroup2, total: totalGroup1 + totalGroup2 }, 
+       labels: labels 
+     }; 
+      
+     const personnelMap = new Map(allPersonnel.map(p => [p.id, p])); 
+     allPersonnel.forEach(p => { 
+         if (p.section) { 
+           const section = p.section.trim(); 
+           if (!indicators.sectionHeadcount.theoretical[section]) { 
+             indicators.sectionHeadcount.theoretical[section] = 0; 
+             indicators.sectionHeadcount.presentToday[section] = 0; 
+           } 
+           indicators.sectionHeadcount.theoretical[section]++; 
+         } 
+         if (p.posteDeTravail) { 
+           const workstations = p.posteDeTravail.split(',').map(ws => ws.trim()).filter(Boolean); 
+           workstations.forEach(ws => { 
+             if (!indicators.workstationHeadcount.theoretical[ws]) { 
+               indicators.workstationHeadcount.theoretical[ws] = 0; 
+               indicators.workstationHeadcount.presentToday[ws] = 0; 
+             } 
+             indicators.workstationHeadcount.theoretical[ws]++; 
+           }); 
+         } 
+     }); 
+      
+     // --- CORRECTION : Création d'un Set pour la recherche rapide --- 
+     const personnelIdSet = new Set(personnelIds); 
+     // On filtre les présences en utilisant le Set, ce qui est très performant. 
+     const relevantPresenceRows = allPresencesData.filter(row => personnelIdSet.has(row[0])); 
+
+     for (const row of relevantPresenceRows) { 
+       const personInfo = personnelMap.get(row[0]); 
+       if (!personInfo) continue; 
+        
+       const personName = `${personInfo.prenom} ${personInfo.nom}`; 
+       let groupKey; 
+       if (group1Roles.includes(personInfo.role)) groupKey = 'compagnons'; 
+       else if (group2Roles.includes(personInfo.role)) groupKey = 'interimaires'; 
+       else continue; 
+
+       const year = parseInt(row[1]); 
+       if (year === targetYear) { 
+         processYearData(row, personName, groupKey, indicators); 
+         if (row[2 + targetMonth]) { 
+           try { 
+             const monthData = JSON.parse(row[2 + targetMonth]); 
+             processMonthData(monthData, personName, groupKey, targetMonth, year, weekStartDate, weekEndDate, targetDay, indicators, personInfo); 
+           } catch(e) { /* ignore les erreurs de parsing */ } 
+         } 
+       } 
+     } 
+     return indicators; 
+   } catch (e) { 
+     Logger.log(`Erreur critique dans getIndicatorsData: ${e.stack}`); 
+     return { error: `Erreur serveur lors du calcul des indicateurs: ${e.message}` }; 
+   } 
+ } 
+
+ // Les fonctions processYearData et processMonthData ne sont plus nécessaires, vous pouvez les supprimer. 
+
+ // Fonctions d'aide pour alléger getIndicatorsData 
+ function processYearData(row, personName, groupKey, indicators) { 
+     for (let monthIdx = 0; monthIdx < 12; monthIdx++) { 
+         if (!row[2 + monthIdx]) continue; 
+         const monthData = JSON.parse(row[2 + monthIdx]); 
+         for (const day in monthData) { 
+             const status = monthData[day]?.s; 
+             if (!status) continue; 
+             const period = indicators[groupKey].yearly; 
+             if (['M', 'A', 'N', 'J'].includes(status)) { 
+                 period.presence.push(personName); 
+             } else if (period[status] !== undefined) { 
+                 period[status].push(personName); 
+             } 
+         } 
+     } 
+ } 
+
+ function processMonthData(monthData, personName, groupKey, targetMonth, targetYear, weekStartDate, weekEndDate, targetDay, indicators, personInfo) { 
+   for (const day in monthData) { 
+     const status = monthData[day]?.s; 
+     if (!status) continue; 
+
+     const currentDate = new Date(Date.UTC(targetYear, targetMonth, parseInt(day))); 
+     const isPresent = ['M', 'A', 'N', 'J'].includes(status); 
+      
+const processStat = (period) => { 
+       if (isPresent) {
+           period.presence.push(personName); 
+           // On enregistre aussi le statut spécifique (M, A, N, J) pour l'analyse des quarts
+           if (period[status] !== undefined) period[status].push(personName);
+       }
+       else if (period[status] !== undefined) period[status].push(personName); 
+     };
+     
+     // Monthly stats 
+     processStat(indicators[groupKey].monthly); 
+     if (!isPresent && status !== 'Mi') { 
+       if (!indicators.monthlyAbsenceBreakdown[status]) indicators.monthlyAbsenceBreakdown[status] = 0; 
+       indicators.monthlyAbsenceBreakdown[status]++; 
+     }
+      
+     // Weekly stats 
+     if (currentDate >= weekStartDate && currentDate <= weekEndDate) { 
+       processStat(indicators[groupKey].weekly); 
+     } 
+
+     // Daily stats 
+     if (day === targetDay) { 
+       processStat(indicators[groupKey].daily); 
+       if (isPresent) { 
+         // Compteur par section 
+         if (personInfo.section) { 
+           const section = personInfo.section.trim(); 
+           if (indicators.sectionHeadcount.presentToday[section] !== undefined) { 
+             indicators.sectionHeadcount.presentToday[section]++; 
+           } 
+         } 
+         // NOUVEAU : Compteur par poste de travail 
+         if (personInfo.posteDeTravail) { 
+           const workstations = personInfo.posteDeTravail.split(',').map(ws => ws.trim()).filter(Boolean); 
+           workstations.forEach(ws => { 
+             if (indicators.workstationHeadcount.presentToday[ws] !== undefined) { 
+               indicators.workstationHeadcount.presentToday[ws]++; 
+             } 
+           }); 
+         } 
+       } 
+     } 
+   } 
+ } 
+
+
+ function saveComment(personnelId, dateStr, comment) { 
+     const lock = LockService.getScriptLock(); 
+     lock.waitLock(30000); 
+     try { 
+         // --- DÉBUT DE LA MODIFICATION --- 
+         // On utilise la nouvelle fonction de vérification centralisée. 
+         _ensureModificationIsAllowed(Session.getActiveUser().getEmail(), personnelId); 
+         // --- FIN DE LA MODIFICATION --- 
+
+         const ss = SpreadsheetApp.openById(SPREADSHEET_ID); 
+         const sheet = ss.getSheetByName(FEUILLE_PRESENCES); 
+         if (!sheet) throw new Error(`Feuille "${FEUILLE_PRESENCES}" introuvable.`); 
+          
+         const dateObj = new Date(dateStr); 
+         const year = dateObj.getFullYear(); 
+         const monthIndex = dateObj.getMonth(); 
+         const day = dateObj.getDate().toString(); 
+          
+         // Utilisation de la nouvelle fonction pour trouver la ligne SANS tout lire. 
+         let rowIndex = _findPresenceRowIndex(sheet, personnelId, year); 
+
+         if (rowIndex === -1) { 
+             const newRowData = Array(14).fill(''); 
+             newRowData[0] = personnelId; newRowData[1] = year; 
+             sheet.appendRow(newRowData); 
+             rowIndex = sheet.getLastRow(); 
+         } 
+
+         const monthCol = monthIndex + 3; 
+         const range = sheet.getRange(rowIndex, monthCol); 
+         const monthDataStr = range.getValue(); 
+         const monthData = monthDataStr ? JSON.parse(monthDataStr) : {}; 
+         const dayData = monthData[day] || {}; 
+
+         if (comment === '' || comment === null) { 
+             delete dayData.c; 
+         } else { 
+             dayData.c = comment; 
+         } 
+
+         if (Object.keys(dayData).length === 0) { 
+             delete monthData[day]; 
+         } else { 
+             monthData[day] = dayData; 
+         } 
+          
+         const newMonthDataStr = Object.keys(monthData).length > 0 ? JSON.stringify(monthData) : ''; 
+         range.setValue(newMonthDataStr); 
+         const newTimestamp = _updateLastModified(); 
+         return { success: true, newTimestamp: newTimestamp }; 
+
+     } catch(e) { 
+         Logger.log(`Erreur saveComment: ${e.stack}`); 
+         return { error: e.message }; 
+     } finally { 
+         lock.releaseLock(); 
+     } 
+ } 
+
+ /**  * [OPTIMISÉ V2] Applique un statut sur une plage de dates. 
+  * Regroupe les changements par mois pour minimiser les lectures/écritures. 
+  */ 
+ function setPresenceForDateRange(personnelId, startDateStr, endDateStr, status, loc = null) {
+     const lock = LockService.getScriptLock(); 
+     lock.waitLock(30000); 
+
+     try { 
+         // --- DÉBUT DE LA MODIFICATION --- 
+         // On utilise la nouvelle fonction de vérification centralisée. 
+         _ensureModificationIsAllowed(Session.getActiveUser().getEmail(), personnelId); 
+         // --- FIN DE LA MODIFICATION --- 
+
+         const ss = SpreadsheetApp.openById(SPREADSHEET_ID); 
+         const sheet = ss.getSheetByName(FEUILLE_PRESENCES); 
+     if (!sheet) throw new Error(`Feuille "${FEUILLE_PRESENCES}" introuvable.`); 
+
+     const startDate = new Date(startDateStr + "T12:00:00Z"); 
+     const endDate = new Date(endDateStr + "T12:00:00Z"); 
+      
+     // --- NOUVELLE LOGIQUE D'OPTIMISATION --- 
+      
+     const holidaysCache = {}; 
+     // Map pour regrouper les jours à changer par mois. 
+     // Clé: "année-mois" (ex: "2025-6"), Valeur: [jours] (ex: ["1", "2", "5"]) 
+     const changesByMonth = new Map(); 
+
+     // Étape 1: Itérer sur la plage de dates pour identifier tous les jours ouvrés à modifier. 
+     for (let d = new Date(startDate.getTime()); d <= endDate; d.setDate(d.getDate() + 1)) { 
+       const dayOfWeek = d.getUTCDay(); 
+       const currentYear = d.getUTCFullYear(); 
+
+       // On charge les jours fériés pour l'année si ce n'est pas déjà fait. 
+       if (!holidaysCache[currentYear]) { 
+         holidaysCache[currentYear] = getHolidaysForYear(currentYear); 
+       } 
+       const dateKey = `${currentYear}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`; 
+        
+       // On saute les samedis, dimanches ET les jours fériés. 
+       if (dayOfWeek === 0 || dayOfWeek === 6 || !!holidaysCache[currentYear][dateKey]) { 
+         continue; 
+       } 
+
+       // On ajoute le jour à la liste des changements pour le mois concerné. 
+       const year = d.getUTCFullYear(); 
+       const monthIndex = d.getUTCMonth(); 
+       const day = d.getUTCDate().toString(); 
+       const monthKey = `${year}-${monthIndex}`; 
+        
+       if (!changesByMonth.has(monthKey)) { 
+         changesByMonth.set(monthKey, []); 
+       } 
+       changesByMonth.get(monthKey).push(day); 
+     } 
+
+     // Étape 2: On traite les changements, un mois à la fois. 
+     if (changesByMonth.size > 0) { 
+       for (const [monthKey, daysToChange] of changesByMonth.entries()) { 
+         const [yearStr, monthIndexStr] = monthKey.split('-'); 
+         const year = parseInt(yearStr); 
+         const monthIndex = parseInt(monthIndexStr); 
+          
+         let rowIndex = _findPresenceRowIndex(sheet, personnelId, year); 
+
+         // Si la ligne pour l'année n'existe pas, on la crée. 
+         if (rowIndex === -1) { 
+           sheet.appendRow([personnelId, year, ...Array(12).fill('')]); 
+           rowIndex = sheet.getLastRow(); 
+         } 
+
+         const monthCol = monthIndex + 3; 
+         const range = sheet.getRange(rowIndex, monthCol); 
+         const monthDataStr = range.getValue(); 
+         const monthData = monthDataStr ? JSON.parse(monthDataStr) : {}; 
+
+         // On applique tous les changements pour ce mois sur l'objet JSON. 
+         daysToChange.forEach(day => { 
+           const dayData = monthData[day] || {}; 
+           if (status === '') { 
+             delete dayData.s; 
+             delete dayData.loc; // On efface la localisation
+           } else { 
+             dayData.s = status; 
+             if (loc) dayData.loc = loc; else delete dayData.loc; // On ajoute la localisation
+           } 
+           if (Object.keys(dayData).length === 0) { 
+             delete monthData[day]; 
+           } else { 
+             monthData[day] = dayData; 
+           } 
+         });
+          
+         // On écrit le JSON mis à jour DANS LA FEUILLE, une seule fois pour tout le mois. 
+         const newMonthDataStr = Object.keys(monthData).length > 0 ? JSON.stringify(monthData) : ''; 
+         range.setValue(newMonthDataStr); 
+       } 
+     } 
+      
+     const newTimestamp = _updateLastModified(); 
+     Logger.log(`Mise à jour en masse optimisée pour ${personnelId} du ${startDateStr} au ${endDateStr}.`); 
+     return { success: true, newTimestamp: newTimestamp }; 
+
+   } catch (e) { 
+     Logger.log(`Erreur setPresenceForDateRange: ${e.stack}`); 
+     return { error: `Erreur serveur: ${e.message}` }; 
+   } finally { 
+     lock.releaseLock(); 
+   } 
+ } 
+
+ /**  * [OPTIMISÉ FINAL] Affiche la semaine PRÉCÉDANT la date sélectionnée en utilisant une lecture de données ciblée. 
+  */ 
+function getWeeklyComparison(mode = 'production', selectedDateStr, teamSelection = 'Tous') { 
+   try { 
+     const dateStr = selectedDateStr || new Date().toISOString().slice(0, 10); 
+     const allPersonnel = _getPersonnelForMode(mode);
+
+     // --- DÉFINITION DES GROUPES ET LIBELLÉS EN FONCTION DU MODE --- 
+     let labels, group1Roles, group2Roles; 
+     if (mode === 'support') { 
+       labels = { group1: 'Encadrement', group2: 'Support & Apprentis' }; 
+       group1Roles = ['RP', 'REAP', 'MFT', 'Responsable Preparateur', 'Responsable Qualité']; 
+       group2Roles = ['Apprenti', 'Préparateur', 'Qualité']; 
+     } else { 
+       labels = { group1: 'Compagnons', group2: 'Intérimaires' }; 
+       group1Roles = ['Compagnon', 'Pilote']; // <-- MODIFICATION
+       group2Roles = ['Intérimaire']; 
+     } 
+
+     const referenceDate = new Date(Date.UTC(...dateStr.split('-').map((n, i) => i === 1 ? parseInt(n) - 1 : parseInt(n))));
+     const dayOfWeek = referenceDate.getUTCDay(); 
+     const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1; 
+     const weekStartDate = new Date(referenceDate); 
+     weekStartDate.setUTCDate(referenceDate.getUTCDate() - daysToSubtract); 
+      
+     const teamMembers = _getTeamMembers(teamSelection, referenceDate, allPersonnel); 
+     // -----------------------
+
+     const personnelMap = new Map(allPersonnel.map(p => [p.id, p])); 
+     const memberIds = teamMembers.map(p => p.id);
+
+     // Déterminer les années couvertes par la semaine (gère le cas où une semaine est à cheval sur deux années) 
+     const weekDates = Array.from({length: 7}, (_, i) => { 
+       const d = new Date(weekStartDate); 
+       d.setUTCDate(weekStartDate.getUTCDate() + i); 
+       return d; 
+     }); 
+     const yearsInWeek = [...new Set(weekDates.map(d => d.getUTCFullYear()))]; 
+
+     // --- OPTIMISATION : On récupère les données uniquement pour les membres et les années de la semaine concernée. 
+     const allPresencesData = _fetchPresenceDataForUsers(memberIds, yearsInWeek); 
+      
+     const weeklyStats = {}; 
+     const createDailyStats = () => ({ presence: [], Mi: [], Ma: [], LMa: [], CP: [], Abs: [], F: [], RF: [] });
+
+     for (const currentDate of weekDates) { 
+         const currentDateKey = currentDate.toISOString().slice(0, 10); 
+         const year = currentDate.getUTCFullYear(); 
+         const monthIndex = currentDate.getUTCMonth(); 
+         const dayStr = currentDate.getUTCDate().toString(); 
+
+         const dailyResults = { compagnons: createDailyStats(), interimaires: createDailyStats() }; 
+          
+         // On filtre les données déjà récupérées (très rapide) 
+         const presenceRowsForYear = allPresencesData.filter(r => r[1] == year); 
+
+         for (const row of presenceRowsForYear) { 
+             const personId = row[0]; 
+             if (!row[monthIndex + 2]) continue; 
+              
+             try { 
+                 const monthData = JSON.parse(row[monthIndex + 2]); 
+                 const status = monthData[dayStr]?.s; 
+                 if (!status) continue; 
+
+                 const personInfo = personnelMap.get(personId); 
+                 if (!personInfo) continue; 
+
+                 const personName = `${personInfo.prenom} ${personInfo.nom}`; 
+                  
+                 let targetRoleStats; 
+                 if (group1Roles.includes(personInfo.role)) { 
+                   targetRoleStats = dailyResults.compagnons; 
+                 } else if (group2Roles.includes(personInfo.role)) { 
+                   targetRoleStats = dailyResults.interimaires; 
+                 } else { 
+                   continue;  
+                 } 
+                  
+                 if (['M', 'A', 'N', 'J'].includes(status)) { 
+                     targetRoleStats.presence.push(personName); 
+                 } else if (targetRoleStats[status] !== undefined) { 
+                     targetRoleStats[status].push(personName); 
+                 } 
+             } catch(e) { /* ignore les erreurs de parsing */ } 
+         } 
+         weeklyStats[currentDateKey] = dailyResults; 
+     } 
+      
+     weeklyStats.labels = labels;  
+     return weeklyStats; 
+   } catch (e) { 
+     Logger.log(`Erreur getWeeklyComparison: ${e.stack}`); 
+     return { error: `Erreur serveur: ${e.message}` }; 
+   } 
+ } 
+
+ /**  * [REMANIÉ AVEC IDs] Gère la sélection multiple et détermine les membres d'une ou plusieurs équipes. 
+  * Utilise désormais les IDs uniques pour des relations fiables entre managers et subordonnés. 
+  * @param {string|Array<string>} selection La ou les sélections de l'utilisateur. 
+  * @param {Date} referenceDate Une date (typiquement le lundi) pour déterminer les quarts de la semaine. 
+  * @param {Array<Object>} allPersonnel La liste complète du personnel sur laquelle filtrer. 
+  * @returns {Array<Object>} Une liste filtrée des membres de l'équipe. 
+  */ 
+function _getTeamMembers(selection, referenceDate, allPersonnel) {
+    // Cas simples : pas de sélection ou sélection de "Tous"
+    if (!selection || (Array.isArray(selection) && selection.includes('Tous'))) {
+        return allPersonnel;
+    }
+    if (selection === 'Tous') return allPersonnel;
+
+    // --- Fonctions utilitaires internes (inchangées) ---
+    const weekDates = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(referenceDate.getTime());
+        d.setUTCDate(referenceDate.getUTCDate() + i);
+        return d;
+    });
+    const yearsInWeek = [...new Set(weekDates.map(d => d.getUTCFullYear()))];
+    const allPersonnelIds = allPersonnel.map(p => p.id);
+    const presencesForWeek = _fetchPresenceDataForUsers(allPersonnelIds, yearsInWeek);
+    const presenceMapForWeek = new Map();
+    presencesForWeek.forEach(row => {
+        presenceMapForWeek.set(`${row[0]}-${row[1]}`, row);
+    });
+    const getActualShift = (personnelId, date) => {
+        const y = date.getUTCFullYear();
+        const m = date.getUTCMonth();
+        const d = date.getUTCDate().toString();
+        const presenceRow = presenceMapForWeek.get(`${personnelId}-${y}`);
+        if (!presenceRow) return null;
+        const monthDataStr = presenceRow[m + 2];
+        if (!monthDataStr) return null;
+        try {
+            const monthData = JSON.parse(monthDataStr);
+            return (monthData[d] && monthData[d].s) ? monthData[d].s : null;
+        } catch (e) { return null; }
+    };
+
+    // --- Cas d'un manager (RP, etc.) qui ne peut pas être multi-sélectionné ---
+    const managerMatch = typeof selection === 'string' && selection.match(/^(.*) \((RP|Responsable Preparateur|Responsable Qualité)\)$/);
+    if (managerMatch) {
+        const name = managerMatch[1];
+        const role = managerMatch[2];
+        const selectedManager = allPersonnel.find(p => `${p.prenom} ${p.nom}` === name && p.role === role);
+        if (!selectedManager) return [];
+        
+        const directReports = allPersonnel.filter(p => p.responsableHierarchique === selectedManager.id);
+        return [selectedManager, ...directReports];
+    }
+
+    // --- Logique pour la multi-sélection (REAP + Leader) ---
+    // --- Logique pour la multi-sélection (REAP + Leader) ---
+    const finalMemberIds = new Set();
+    const selectionsArray = Array.isArray(selection) ? selection : [selection];
+
+    // 2. On traite la sélection des équipes de REAP ou Leader
+    const reapSelections = selectionsArray.filter(s => s !== '__UNASSIGNED_3x8__');
+    if (reapSelections.length > 0) {
+        
+        // --- DÉBUT DE LA LOGIQUE CORRIGÉE ---
+        // ÉTAPE 1 : On déclare les Sets AVANT de les utiliser
+        const selectedReapIds = new Set();
+        const selectedLeaderSections = new Set();
+
+        // ÉTAPE 2 : On identifie les managers sélectionnés
+        allPersonnel.forEach(p => {
+            const fullName = `${p.prenom} ${p.nom}`;
+            const fullNameWithRole = `${fullName} (${p.role})`; 
+            
+            // On vérifie si la sélection correspond au nom complet AVEC ou SANS le rôle
+            if (reapSelections.includes(fullNameWithRole) || reapSelections.includes(fullName)) {
+                if (p.role === 'REAP') {
+                    selectedReapIds.add(p.id);
+                } else if (p.role === 'Pilote') {
+                    selectedLeaderSections.add(p.section);
+                    finalMemberIds.add(p.id); // On ajoute le leader lui-même
+                }
+            }
+        });
+
+        // ÉTAPE 3 : On définit les membres potentiels
+        const potentialMembers = allPersonnel.filter(p => 
+            ['Compagnon', 'Intérimaire', 'MFT', 'Pilote', 'Apprenti Atelier'].includes(p.role)
+        );
+
+        // ÉTAPE 4 : Appliquer le filtrage
+        potentialMembers.forEach(person => {
+            if (finalMemberIds.has(person.id)) return; 
+
+            let isTeamMember = false;
+            if (selectedReapIds.has(person.chefEquipeAssocie)) {
+                isTeamMember = true;
+            } 
+            else if (person.section && selectedLeaderSections.has(person.section)) {
+                isTeamMember = true;
+            }
+            
+            if (isTeamMember) {
+                finalMemberIds.add(person.id);
+            }
+        });
+    }
+
+    // 3. On retourne le résultat combiné
+    return allPersonnel.filter(p => finalMemberIds.has(p.id));
+}
+
+/** * [FONCTION CORRIGÉE] Détermine le quart de travail dominant d'une personne 
+ * pour une semaine donnée. Si la personne est en congé toute la semaine, 
+ * extrapole son quart en lisant son cycle dans le futur ou le passé.
+ * @param {object} person L'objet personnel. 
+ * @param {Date} mondayDate Le lundi de la semaine de référence. 
+ * @param {function} getActualShift La fonction utilitaire pour récupérer le statut réel. 
+ * @returns {string | null} Le quart dominant ('M', 'A', 'N') ou théorique. 
+ */ 
+function _getDominantShiftForWeek(person, mondayDate, getActualShift) { 
+  let cycle = [];
+if (person.typeQuart === '3*8') cycle = ['M', 'N', 'A'];
+else if (person.typeQuart === '2*8') cycle = ['M', 'A'];
+else if (person.typeQuart === '9*10') cycle = ['SC', 'SL'];
+else if (person.typeQuart === '9*10 Portugal') cycle = ['M', 'M', 'M', 'A', 'A', 'A'];
+else if (person.typeQuart === 'Nuit Portugal') cycle = ['N'];
+
+  if (cycle.length === 0) return 'J'; // Journée ou non géré
+
+  // Fonction locale pour compter les jours travaillés sur une semaine précise
+  const getVotesForWeek = (dateLundi) => {
+    let votes = { 'M': 0, 'A': 0, 'N': 0 };
+    let max = 0;
+    let dom = null;
+    for (let i = 0; i < 5; i++) {
+      let d = new Date(dateLundi);
+      d.setUTCDate(dateLundi.getUTCDate() + i);
+      let s = getActualShift(person.id, d);
+      if (s && votes[s] !== undefined) {
+        votes[s]++;
+        if (votes[s] > max) {
+          max = votes[s];
+          dom = s;
+        }
+      }
+    }
+    return { max, dom };
+  };
+
+  // 1. Lire la semaine actuelle (fonctionnement normal)
+  let current = getVotesForWeek(mondayDate);
+  if (current.max > 0) return current.dom;
+
+  // 2. Si aucune donnée (ex: en CP toute la semaine), on cherche la prochaine semaine travaillée dans le futur
+  for (let w = 1; w <= 52; w++) {
+    let futureMonday = new Date(mondayDate);
+    futureMonday.setUTCDate(futureMonday.getUTCDate() + (w * 7));
+    // On s'arrête si on change d'année (car les données en mémoire sont celles de l'année ciblée)
+    if (futureMonday.getUTCFullYear() !== mondayDate.getUTCFullYear()) break; 
+
+    let future = getVotesForWeek(futureMonday);
+    if (future.max > 0 && cycle.includes(future.dom)) {
+      const futureIdx = cycle.indexOf(future.dom);
+      // On recule dans le cycle. (Le modulo négatif en JS nécessite une correction)
+      let currentIdx = (futureIdx - w) % cycle.length;
+      if (currentIdx < 0) currentIdx += cycle.length; 
+      return cycle[currentIdx];
+    }
+  }
+
+  // 3. Si tout le futur est vide, on cherche dans les semaines passées
+  for (let w = 1; w <= 52; w++) {
+    let pastMonday = new Date(mondayDate);
+    pastMonday.setUTCDate(pastMonday.getUTCDate() - (w * 7));
+    if (pastMonday.getUTCFullYear() !== mondayDate.getUTCFullYear()) break; 
+
+    let past = getVotesForWeek(pastMonday);
+    if (past.max > 0 && cycle.includes(past.dom)) {
+      const pastIdx = cycle.indexOf(past.dom);
+      const currentIdx = (pastIdx + w) % cycle.length;
+      return cycle[currentIdx];
+    }
+  }
+
+  // 4. Fallback ultime si 100% de l'année est en CP (très rare, mais sécurisé)
+  return _calculateShiftForDate(person, mondayDate);
+}
+
+ /**  * Calcule les jours fériés français pour une année donnée. 
+  * @param {number} year L'année pour laquelle calculer les jours fériés. 
+  * @returns {Object} Un objet avec les dates comme clés (YYYY-MM-DD) et le nom du jour férié comme valeur. 
+  */ 
+function getHolidaysForYear(year, country = null) {
+  // Si le pays n'est pas fourni, on le lit dans la configuration
+  if (!country) {
+    const config = getConfiguration();
+    country = config.holidayCountry || 'FR';
+  }
+
+  // Algorithme pour calculer la date de Pâques (valide pour le calendrier grégorien)
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  const easter = new Date(Date.UTC(year, month - 1, day));
+
+  const holidays = {};
+  const addHoliday = (date, name) => {
+    const key = date.toISOString().slice(0, 10);
+    holidays[key] = name;
+  };
+
+  if (country === 'FR') {
+    // Jours fériés fixes FRANCE
+    addHoliday(new Date(Date.UTC(year, 0, 1)), "Jour de l'an");
+    addHoliday(new Date(Date.UTC(year, 4, 1)), "Fête du Travail");
+    addHoliday(new Date(Date.UTC(year, 4, 8)), "Victoire 1945");
+    addHoliday(new Date(Date.UTC(year, 6, 14)), "Fête Nationale");
+    addHoliday(new Date(Date.UTC(year, 7, 15)), "Assomption");
+    addHoliday(new Date(Date.UTC(year, 10, 1)), "Toussaint");
+    addHoliday(new Date(Date.UTC(year, 10, 11)), "Armistice 1918");
+    addHoliday(new Date(Date.UTC(year, 11, 25)), "Noël");
+
+    // Jours fériés mobiles FRANCE
+    const easterMonday = new Date(easter);
+    easterMonday.setUTCDate(easter.getUTCDate() + 1);
+    addHoliday(easterMonday, "Lundi de Pâques");
+
+    const ascension = new Date(easter);
+    ascension.setUTCDate(easter.getUTCDate() + 39);
+    addHoliday(ascension, "Ascension");
+
+    const pentecostMonday = new Date(easter);
+    pentecostMonday.setUTCDate(easter.getUTCDate() + 50);
+    addHoliday(pentecostMonday, "Lundi de Pentecôte");
+
+  } else if (country === 'PT') {
+    // Jours fériés fixes PORTUGAL
+    addHoliday(new Date(Date.UTC(year, 0, 1)), "Ano Novo");
+    addHoliday(new Date(Date.UTC(year, 3, 25)), "Dia da Liberdade");
+    addHoliday(new Date(Date.UTC(year, 4, 1)), "Dia do Trabalhador");
+    addHoliday(new Date(Date.UTC(year, 5, 10)), "Dia de Portugal");
+    addHoliday(new Date(Date.UTC(year, 7, 15)), "Assunção de N. Senhora");
+    addHoliday(new Date(Date.UTC(year, 9, 5)), "Implantação da República");
+    addHoliday(new Date(Date.UTC(year, 10, 1)), "Todos os Santos");
+    addHoliday(new Date(Date.UTC(year, 11, 1)), "Rest. da Independência");
+    addHoliday(new Date(Date.UTC(year, 11, 8)), "Imaculada Conceição");
+    addHoliday(new Date(Date.UTC(year, 11, 25)), "Natal");
+
+    // Jours fériés mobiles PORTUGAL
+    const goodFriday = new Date(easter);
+    goodFriday.setUTCDate(easter.getUTCDate() - 2);
+    addHoliday(goodFriday, "Sexta-feira Santa");
+    
+    addHoliday(easter, "Páscoa");
+
+    const corpusChristi = new Date(easter);
+    corpusChristi.setUTCDate(easter.getUTCDate() + 60);
+    addHoliday(corpusChristi, "Corpo de Deus");
+  }
+
+  return holidays;
+}
+
+function getPublicHolidays(year) {
+  const config = getConfiguration();
+  const country = config.holidayCountry || 'FR';
+  const cacheKey = `holidays_${country}_${year}`;
+
+  return getOrSetCache(cacheKey, 3600 * 24 * 90, () => {
+    return getHolidaysForYear(year, country);
+  });
+}
+
+ /**  * Filtre la liste complète du personnel en fonction du mode d'application demandé. 
+  * @param {string} mode Le mode d'application ('production' ou 'support'). 
+  * @returns {Array<Object>} Une liste filtrée d'objets personnel. 
+  */ 
+function _getPersonnelForMode(mode = 'production', includeArchived = false) { 
+   const allPersonnel = getPersonnel(includeArchived);
+    
+   if (mode === 'support') { 
+     // AJOUT des nouveaux rôles à la vue Encadrement 
+     const supportRoles = ['RP', 'REAP', 'MFT', 'Apprenti', 'Responsable Preparateur', 'Préparateur', 'Responsable Qualité', 'Qualité']; 
+     return allPersonnel.filter(p => supportRoles.includes(p.role)); 
+   } 
+    
+   // Par défaut, le mode production
+   const prodRoles = ['REAP', 'Compagnon', 'Intérimaire', 'Pilote', 'Apprenti Atelier']; // <-- AJOUT DU NOUVEAU RÔLE
+   return allPersonnel.filter(p => prodRoles.includes(p.role));
+}
+
+ /**  * [NOUVELLE FONCTION D'OPTIMISATION V2] 
+  * Récupère les données de présence uniquement pour une liste de personnel et une liste d'années spécifiques. 
+  * C'est la méthode la plus efficace pour éviter de lire toute la feuille et de dépasser les limites de cache. 
+  * @param {string[]} personnelIds La liste des IDs du personnel à récupérer. 
+  * @param {number[]} years La liste des années pour lesquelles récupérer les données. 
+  * @returns {Array<Array<string>>} Un tableau de lignes de données correspondant aux personnes et années trouvées. 
+  */ 
+ function _fetchPresenceDataForUsers(personnelIds, years) { 
+   const personnelIdSet = new Set(personnelIds); 
+   // On s'assure que les années sont des chaînes de caractères pour une comparaison fiable 
+   const yearSet = new Set(years.map(y => String(y)));  
+    
+   if (personnelIdSet.size === 0 || yearSet.size === 0) { 
+     return []; 
+   } 
+
+   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(FEUILLE_PRESENCES); 
+   if (sheet.getLastRow() < 2) { 
+     return []; 
+   } 
+
+   // Étape 1 : On lit seulement l'index (Colonnes A et B) pour trouver les lignes qui nous intéressent. 
+   const indexValues = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues(); 
+   const matchedRowNumbers = []; 
+
+   for (let i = 0; i < indexValues.length; i++) { 
+     const rowId = indexValues[i][0]; 
+     const rowYear = String(indexValues[i][1]); 
+      
+     if (personnelIdSet.has(rowId) && yearSet.has(rowYear)) { 
+       // On a trouvé une ligne qui correspond. On stocke son numéro. 
+       // (la ligne 2 de la feuille correspond à l'index 0, donc on ajoute 2) 
+       matchedRowNumbers.push(i + 2); 
+     } 
+   } 
+
+   if (matchedRowNumbers.length === 0) { 
+     return []; 
+   } 
+    
+   // Étape 2 : On construit une liste de plages à lire (ex: ["A5:N5", "A12:N12"]). 
+   const lastColLetter = sheet.getRange(1, sheet.getLastColumn()).getA1Notation().replace(/\d+/, ''); 
+   const rangeListA1 = matchedRowNumbers.map(rowNum => `A${rowNum}:${lastColLetter}${rowNum}`); 
+
+   // Étape 3 : On récupère toutes les données de ces plages en un seul appel optimisé. 
+   const ranges = sheet.getRangeList(rangeListA1).getRanges(); 
+   const results = []; 
+   for (const range of ranges) { 
+     // Chaque 'range' contient les données d'une seule ligne 
+     results.push(...range.getValues()); 
+   } 
+
+   return results; 
+ } 
+
+ /**  * Clé unique pour stocker toute la configuration de l'application. 
+  */ 
+ const CONFIG_KEY = 'app_config'; 
+
+function getConfiguration() {
+  const properties = PropertiesService.getScriptProperties();
+  const storedConfigString = properties.getProperty(CONFIG_KEY);
+  
+  const defaultConfig = {
+    appName: "Planning Présence",
+    // ... tes autres configs par défaut restent identiques
+  };
+
+  let configToReturn = defaultConfig;
+
+  if (storedConfigString) {
+    const storedConfig = JSON.parse(storedConfigString);
+    configToReturn = {
+      ...defaultConfig,
+      ...storedConfig
+    };
+  }
+
+  // 🔴 AJOUT : On lit les cibles manuelles depuis la feuille Sheets
+  try {
+    configToReturn.manualTargets = _readCapaCiblesFromSheet();
+  } catch(e) {
+    Logger.log("Erreur lecture feuille Cibles Manuelles: " + e.message);
+  }
+
+  return configToReturn;
+}
+
+ /**  * [NOUVEAU] Sauvegarde un nouvel objet de configuration dans PropertiesService. 
+  * @param {object} newConfig Le nouvel objet de configuration à sauvegarder. 
+  * @returns {{success: boolean, message: string}} Un objet de résultat. 
+  */ 
+function saveConfiguration(newConfig) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const userRole = _getUserRole(Session.getActiveUser().getEmail());
+    if (userRole !== 'Administrateur') {
+      throw new Error("Accès refusé. Seul un administrateur peut modifier la configuration.");
+    }
+
+    if (!newConfig || typeof newConfig !== 'object') {
+      throw new Error("La configuration fournie est invalide.");
+    }
+
+    // 🔴 AJOUT : Si l'objet contient des cibles manuelles, on les écrit dans la feuille
+    if (newConfig.manualTargets) {
+      _writeCapaCiblesToSheet(newConfig.manualTargets);
+      // On le supprime ensuite pour ne plus encombrer la mémoire système de Google
+      delete newConfig.manualTargets; 
+    }
+
+    const properties = PropertiesService.getScriptProperties();
+    properties.setProperty(CONFIG_KEY, JSON.stringify(newConfig));
+
+    _updateLastModified();
+    Logger.log("La configuration de l'application a été mise à jour.");
+    return { success: true, message: "Configuration enregistrée." };
+  } catch (e) {
+    Logger.log(`Erreur lors de la sauvegarde de la configuration: ${e.stack}`);
+    return { error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+ const FEUILLE_ROLES = "Rôles"; 
+
+function _getUserRole(email) { 
+     const cacheKey = `role_${email}`; 
+     const cachedRole = CacheService.getScriptCache().get(cacheKey); 
+     if (cachedRole) { 
+         return cachedRole; 
+     } 
+
+     const ss = SpreadsheetApp.openById(SPREADSHEET_ID); 
+     const sheet = ss.getSheetByName(FEUILLE_ROLES); 
+     
+     // Si la feuille des rôles n'a qu'un en-tête ou est vide, on bloque l'accès 
+     if (!sheet || sheet.getLastRow() < 2) return 'Non Autorisé'; 
+
+     const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues(); 
+     const userRow = data.find(row => row[0].toLowerCase() === email.toLowerCase()); 
+     
+     // L'intrus n'est plus Lecteur, il devient Non Autorisé
+     const role = userRow ? userRow[1] : 'Non Autorisé'; 
+
+     CacheService.getScriptCache().put(cacheKey, role, 21600); 
+     return role; 
+}
+
+ /**  * [NOUVEAU] Récupère la liste complète des attributions de rôles (email et rôle). 
+  * @returns {Array<Object>} Un tableau d'objets, ex: [{email: "...", role: "..."}] 
+  */ 
+ function getRoleAssignments() { 
+   const ss = SpreadsheetApp.openById(SPREADSHEET_ID); 
+   const sheet = ss.getSheetByName(FEUILLE_ROLES); 
+   if (!sheet || sheet.getLastRow() < 2) { 
+     return []; 
+   } 
+   const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues(); 
+   return data.map(row => ({ email: row[0], role: row[1] })); 
+ } 
+
+ /**  * [NOUVEAU] Sauvegarde la liste complète des attributions de rôles. 
+  * Écrase les anciennes données. Doit être appelé uniquement par un administrateur. 
+  * @param {Array<Object>} assignments Le nouveau tableau d'attributions de rôles. 
+  * @returns {Object} Un objet de succès ou d'erreur. 
+  */ 
+ function saveRoleAssignments(assignments) { 
+   // Sécurité : Seul un administrateur peut modifier les rôles. 
+   const userRole = _getUserRole(Session.getActiveUser().getEmail()); 
+   if (userRole !== 'Administrateur') { 
+     throw new Error("Accès refusé. Seuls les administrateurs peuvent gérer les rôles."); 
+   } 
+
+   const ss = SpreadsheetApp.openById(SPREADSHEET_ID); 
+   const sheet = ss.getSheetByName(FEUILLE_ROLES); 
+    
+   // On efface les anciennes données (sauf l'en-tête) 
+   if (sheet.getLastRow() > 1) { 
+     sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).clearContent(); 
+   } 
+
+   // Si la nouvelle liste n'est pas vide, on l'écrit 
+   if (assignments && assignments.length > 0) { 
+     const dataToWrite = assignments.map(a => [a.email, a.role]); 
+     sheet.getRange(2, 1, dataToWrite.length, 2).setValues(dataToWrite); 
+   } 
+
+   // Vider le cache des rôles pour que les changements soient pris en compte immédiatement 
+   CacheService.getScriptCache().removeAll(assignments.map(a => `role_${a.email}`)); 
+
+   return { success: true }; 
+ } 
+
+ /**  * FONCTION UTILITAIRE À EXÉCUTER UNE SEULE FOIS 
+  * Supprime la configuration sauvegardée pour forcer la recréation des valeurs par défaut. 
+  */ 
+ function _resetAppConfiguration() { 
+   PropertiesService.getScriptProperties().deleteProperty('app_config'); 
+   Logger.log("Configuration de l'application réinitialisée."); 
+ } 
+
+ /**  * [NOUVELLE FONCTION UTILITAIRE] Déduit le nom d'un utilisateur depuis son email. 
+  * Note : Cette méthode est une solution de contournement. L'idéal serait d'avoir  
+  * l'email de l'utilisateur dans la feuille "Personnel". 
+  * @param {string} email L'email de l'utilisateur. 
+  * @returns {string} Le nom formaté (ex: "John.Doe@...com" -> "John Doe"). 
+  */ 
+ function _getUserNameFromEmail(email) { 
+     if (!email) return ''; 
+     return email.split('@')[0].split('.').map(name => name.charAt(0).toUpperCase() + name.slice(1)).join(' '); 
+ } 
+
+ function _ensureModificationIsAllowed(currentUserEmail, targetPersonnelId) { 
+     const userRole = _getUserRole(currentUserEmail); 
+
+     if (userRole === 'Administrateur') return; 
+     if (userRole === 'Lecteur') throw new Error("Accès refusé. Vous disposez de droits en lecture seule."); 
+
+     const allPersonnel = getPersonnel(); 
+     const personToModify = allPersonnel.find(p => p.id === targetPersonnelId); 
+     if (!personToModify) throw new Error("Personnel cible introuvable."); 
+
+     // Puisque nous n'utilisons pas les emails, on identifie le manager actuel par son nom et son rôle 
+     const currentUserFullName = _getUserNameFromEmail(currentUserEmail); 
+     const currentUserAsManager = allPersonnel.find(p => `${p.prenom} ${p.nom}` === currentUserFullName && p.role === userRole); 
+      
+     // Si l'utilisateur actuel n'est pas trouvé comme manager dans la liste, il n'a pas de subordonnés 
+     if (!currentUserAsManager) { 
+          // On vérifie quand même les permissions "latérales" 
+          const peerPermissions = { 
+             'Qualité': ['Qualité', 'Responsable Qualité'], 
+             'Responsable Preparateur': ['Préparateur', 'Responsable Preparateur'], 
+             'MFT': ['MFT'] 
+          }; 
+          if (peerPermissions[userRole] && peerPermissions[userRole].includes(personToModify.role)) { 
+             return; // Permission accordée 
+          } 
+     } else { 
+         // Règle principale : Le manager peut modifier si l'ID de la personne à modifier correspond 
+         // à son propre ID dans les colonnes de relation. 
+         if (personToModify.responsableHierarchique === currentUserAsManager.id || personToModify.chefEquipeAssocie === currentUserAsManager.id) { 
+             return; // Permission accordée 
+         } 
+     } 
+      
+     throw new Error(`Accès refusé. Un "${userRole}" ne peut pas modifier le profil de "${personToModify.role}".`); 
+ } 
+
+ /**  * [NOUVEAU POUR L'ANNULATION] Récupère tous les statuts existants pour une personne sur une plage de dates. 
+  * Gère les plages à cheval sur plusieurs mois ou années. 
+  * @param {string} personnelId L'ID de la personne. 
+  * @param {string} startDateStr La date de début au format "YYYY-MM-DD". 
+  * @param {string} endDateStr La date de fin au format "YYYY-MM-DD". 
+  * @returns {Object} Un objet de la forme { "YYYY-MM-DD": "M", "YYYY-MM-DD": "Abs", ... } 
+  */ 
+ function getStatusesForDateRange(personnelId, startDateStr, endDateStr) { 
+   try { 
+     const startDate = new Date(startDateStr + "T12:00:00Z"); 
+     const endDate = new Date(endDateStr + "T12:00:00Z"); 
+     const oldStatuses = {}; 
+      
+     // On identifie toutes les années concernées par la plage 
+     const startYear = startDate.getUTCFullYear(); 
+     const endYear = endDate.getUTCFullYear(); 
+     const years = []; 
+     for (let y = startYear; y <= endYear; y++) { 
+       years.push(y); 
+     } 
+
+     // On récupère les données de présence pour toutes ces années (utilise l'optimisation) 
+     const presenceRows = _fetchPresenceDataForUsers([personnelId], years); 
+     const presenceDataByYear = new Map(); 
+
+     // On pré-traite les données pour un accès facile 
+     presenceRows.forEach(row => { 
+       const year = row[1]; 
+       const monthlyData = []; 
+       for (let m = 0; m < 12; m++) { 
+         try { 
+           monthlyData.push(row[2 + m] ? JSON.parse(row[2 + m]) : {}); 
+         } catch (e) { 
+           monthlyData.push({}); // Gère le JSON corrompu 
+         } 
+       } 
+       presenceDataByYear.set(String(year), monthlyData); 
+     }); 
+
+     // On parcourt chaque jour de la plage pour trouver les statuts existants 
+     for (let d = new Date(startDate.getTime()); d <= endDate; d.setDate(d.getDate() + 1)) { 
+       const year = d.getUTCFullYear(); 
+       const monthIndex = d.getUTCMonth(); 
+       const day = d.getUTCDate().toString(); 
+       const dateKey = d.toISOString().slice(0, 10); 
+        
+       const yearData = presenceDataByYear.get(String(year)); 
+       if (yearData) { 
+         const monthData = yearData[monthIndex]; 
+         if (monthData && monthData[day] && monthData[day].s) { 
+           oldStatuses[dateKey] = monthData[day].s; 
+         } 
+       } 
+     } 
+     return oldStatuses; 
+   } catch (e) { 
+     Logger.log(`Erreur dans getStatusesForDateRange : ${e.stack}`); 
+     return { error: e.message }; 
+   } 
+ } 
+
+ /**  * [NOUVEAU POUR L'ANNULATION] Restaure un ensemble de statuts pour une personne. 
+  * C'est l'opération inverse de la mise à jour groupée. 
+  * @param {string} personnelId L'ID de la personne. 
+  * @param {Object} presencesToRestore L'objet des présences à restaurer. 
+  * @returns {Object} Un objet de succès ou d'erreur. 
+  */ 
+ function restorePresences(personnelId, presencesToRestore) { 
+     const lock = LockService.getScriptLock(); 
+     lock.waitLock(30000); 
+     try { 
+         _ensureModificationIsAllowed(Session.getActiveUser().getEmail(), personnelId); 
+
+         const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(FEUILLE_PRESENCES); 
+         if (!sheet) throw new Error(`Feuille "${FEUILLE_PRESENCES}" introuvable.`); 
+
+         // On regroupe les changements par mois pour être ultra-performant 
+         const changesByMonth = new Map(); 
+         for (const dateKey in presencesToRestore) { 
+             const status = presencesToRestore[dateKey]; 
+             const dateObj = new Date(dateKey + "T12:00:00Z"); 
+             const year = dateObj.getUTCFullYear(); 
+             const monthIndex = dateObj.getUTCMonth(); 
+             const day = dateObj.getUTCDate().toString(); 
+             const monthKey = `${year}-${monthIndex}`; 
+              
+             if (!changesByMonth.has(monthKey)) { 
+                 changesByMonth.set(monthKey, []); 
+             } 
+             changesByMonth.get(monthKey).push({ day, status }); 
+         } 
+
+         // On applique les changements, un mois à la fois 
+         for (const [monthKey, daysToChange] of changesByMonth.entries()) { 
+             const [yearStr, monthIndexStr] = monthKey.split('-'); 
+             const year = parseInt(yearStr); 
+             const monthIndex = parseInt(monthIndexStr); 
+             let rowIndex = _findPresenceRowIndex(sheet, personnelId, year); 
+
+             if (rowIndex === -1) { // Ne devrait pas arriver lors d'une restauration, mais par sécurité 
+                 sheet.appendRow([personnelId, year, ...Array(12).fill('')]); 
+                 rowIndex = sheet.getLastRow(); 
+             } 
+
+             const monthCol = monthIndex + 3; 
+             const range = sheet.getRange(rowIndex, monthCol); 
+             const monthData = range.getValue() ? JSON.parse(range.getValue()) : {}; 
+
+             daysToChange.forEach(change => { 
+                 const dayData = monthData[change.day] || {}; 
+                 dayData.s = change.status; 
+                 monthData[change.day] = dayData; 
+             }); 
+              
+             range.setValue(JSON.stringify(monthData)); 
+         } 
+          
+         const newTimestamp = _updateLastModified(); 
+         return { success: true, newTimestamp: newTimestamp }; 
+
+     } catch (e) { 
+         Logger.log(`Erreur dans restorePresences: ${e.stack}`); 
+         return { error: `Erreur serveur: ${e.message}` }; 
+     } finally { 
+         lock.releaseLock(); 
+     } 
+ } 
+
+ // Remplacez la fonction _getTeamMembers_Optimized existante par celle-ci
+
+/**
+ * [MODIFIÉ POUR QUART DE TRAVAIL] Version qui reçoit les données pré-chargées pour éviter les lectures redondantes. 
+ * Intègre le filtre dynamique par quart de travail (M, A, N).
+ * @param {string|Array<string>} selection La ou les sélections de l'utilisateur. 
+ * @param {Date} referenceDate Le lundi de la semaine de référence. 
+ * @param {Array<Object>} allPersonnel La liste COMPLÈTE du personnel, déjà chargée. 
+ * @param {Map<string, Array>} presenceMapForWeek Une Map pré-calculée des présences de la semaine. 
+ * @param {string | null} shiftFilter Le filtre de quart de travail ('M', 'A', 'N') ou null.
+ * @returns {Array<Object>} Une liste filtrée des membres de l'équipe. 
+ */ 
+function _getTeamMembers_Optimized(selection, referenceDate, allPersonnel, allPresencesMap, shiftFilter = null) {
+    // Cas simples : pas de sélection ou sélection de "Tous" (inchangé)
+    if (!selection || (Array.isArray(selection) && selection.includes('Tous'))) {
+        return allPersonnel;
+    }
+    if (selection === 'Tous') return allPersonnel;
+
+    // --- Fonction utilitaire interne (maintenant ultra-rapide car elle utilise la Map) ---
+    const getActualShift = (personnelId, date) => {
+        const y = date.getUTCFullYear();
+        const m = date.getUTCMonth();
+        const d = date.getUTCDate().toString();
+        const presenceRow = allPresencesMap.get(`${personnelId}-${y}`); // Utilise la Map passée en argument
+        if (!presenceRow) return null;
+        const monthDataStr = presenceRow[m + 2];
+        if (!monthDataStr) return null;
+        try {
+            const monthData = JSON.parse(monthDataStr);
+            return (monthData[d] && monthData[d].s) ? monthData[d].s : null;
+        } catch (e) { return null; }
+    };
+    
+    // On doit reconstruire les dates de la semaine pour la référence du quart
+    const weekDates = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(referenceDate.getTime());
+        d.setUTCDate(referenceDate.getUTCDate() + i);
+        return d;
+    });
+
+    // --- Cas d'un manager (RP, etc.) (logique inchangée) ---
+    const managerMatch = typeof selection === 'string' && selection.match(/^(.*) \((RP|Responsable Preparateur|Responsable Qualité)\)$/);
+    if (managerMatch) {
+        const name = managerMatch[1];
+        const role = managerMatch[2];
+        const selectedManager = allPersonnel.find(p => `${p.prenom} ${p.nom} (${p.role})` === selection);
+        if (!selectedManager) return [];
+        
+        const directReports = allPersonnel.filter(p => p.responsableHierarchique === selectedManager.id);
+        
+        // On n'applique pas de filtre de quart pour cette vue managériale classique
+        return [selectedManager, ...directReports];
+    }
+    
+    // --- Logique pour la multi-sélection (REAP + Leader) ---
+    const finalMemberIds = new Set();
+    const selectionsArray = Array.isArray(selection) ? selection : [selection];
+
+    // 1. Déterminer la liste initiale de membres SANS filtre de quart
+    const reapSelections = selectionsArray.filter(s => s !== '__UNASSIGNED_3x8__');
+    if (reapSelections.length > 0) {
+        const selectedReapIds = new Set();
+        const selectedLeaderSections = new Set();
+        
+        // On identifie tous les managers sélectionnés
+        allPersonnel.forEach(p => {
+            const fullNameWithRole = `${p.prenom} ${p.nom} (${p.role})`;
+            if (reapSelections.includes(fullNameWithRole)) {
+                if (p.role === 'REAP') {
+                    selectedReapIds.add(p.id);
+                } else if (p.role === 'Pilote') {
+                    selectedLeaderSections.add(p.section);
+                    finalMemberIds.add(p.id); // On ajoute le leader lui-même
+                }
+            }
+        });
+
+        // On détermine les membres de l'équipe (Compagnons, Intérimaires, MFT, Pilotes)
+        const potentialMembers = allPersonnel.filter(p =>
+            ['Compagnon', 'Intérimaire', 'MFT', 'Pilote', 'Apprenti Atelier'].includes(p.role) // <-- AJOUT DE 'Apprenti Atelier'
+        );
+
+        // On ajoute les membres de l'équipe selon les règles d'association
+        potentialMembers.forEach(person => {
+            if (finalMemberIds.has(person.id)) return; // Déjà ajouté (ex: un Leader)
+            
+            let isTeamMember = false;
+            // Condition 1: Associé à un REAP sélectionné (filtre par ID)
+            if (selectedReapIds.has(person.chefEquipeAssocie)) {
+                isTeamMember = true;
+            } 
+            // Condition 2: Même section qu'un Leader sélectionné (filtre par Section)
+            else if (person.section && selectedLeaderSections.has(person.section)) {
+                isTeamMember = true;
+            }
+            
+            if (isTeamMember) {
+                finalMemberIds.add(person.id);
+            }
+        });
+    }
+
+    let resultPersonnel = allPersonnel.filter(p => finalMemberIds.has(p.id));
+
+    // --- LOGIQUE DE FILTRAGE PAR QUART SPÉCIFIQUE (NOUVEAU) ---
+    if (shiftFilter) {
+        Logger.log(`Application du filtre par quart : ${shiftFilter}`);
+        
+        // On récupère les IDs des REAP des équipes sélectionnées pour déterminer 
+        // si la personne est dans l'une des équipes fusionnées (REAP ZIMS31 ou ZIMS32)
+        const selectedManagers = allPersonnel.filter(p => selectionsArray.includes(`${p.prenom} ${p.nom} (${p.role})`));
+        const selectedReapIds = new Set(selectedManagers.filter(p => p.role === 'REAP').map(r => r.id));
+        const selectedReapSections = new Set(selectedManagers.filter(p => p.role === 'REAP').map(r => r.section).filter(Boolean));
+        
+        // Les personnes filtrées doivent :
+        // 1. Être dans l'équipe fusionnée (déjà fait par finalMemberIds)
+        // 2. Avoir le quart actuel (réel ou théorique) qui correspond au shiftFilter
+        resultPersonnel = resultPersonnel.filter(person => {
+            // Seules les personnes en 2*8 ou 3*8 sont concernées par ce filtre
+            if (person.typeQuart === 'Journée' || !['2*8', '3*8', '9*10 Portugal', 'Nuit Portugal'].includes(person.typeQuart)) {
+    return false;
+}
+            
+            // Déterminer le quart pour cette semaine
+            // On vérifie d'abord si la personne est sur le quart "réel" (s'il y a des données)
+            const actualShift = _getDominantShiftForWeek(person, referenceDate, getActualShift);
+            
+            // Le quart de travail doit correspondre au filtre
+            return actualShift === shiftFilter;
+        });
+    }
+
+    return resultPersonnel;
+}
+
+ /**
+ * [MODIFIÉ POUR QUART DE TRAVAIL] Version qui reçoit les données pré-chargées pour éviter les lectures redondantes.
+ */ 
+function getWeeklyTeamSchedule_Optimized(teamSelection, weekStartDateStr, allPersonnel, allPresencesMap, shiftFilter = null) { 
+    try { 
+        const teamName = teamSelection.replace(' (REAP)', '').replace(' (RP)', ''); 
+        
+        const referenceMonday = new Date(weekStartDateStr + 'T12:00:00Z'); 
+        // On passe les données pré-chargées et le nouveau filtre à _getTeamMembers
+        const teamMembers = _getTeamMembers_Optimized(teamSelection, referenceMonday, allPersonnel, allPresencesMap, shiftFilter); 
+        
+        const schedule = {}; 
+        const memberIds = teamMembers.map(m => m.id); 
+        memberIds.forEach(id => schedule[id] = {}); 
+
+        const weekDatesISO = Array.from({ length: 7 }, (_, i) => { 
+            const d = new Date(referenceMonday.getTime()); 
+            d.setUTCDate(referenceMonday.getUTCDate() + i); 
+            return d.toISOString().slice(0, 10); 
+        }); 
+        
+        weekDatesISO.forEach(dateStr => { 
+            const date = new Date(dateStr + 'T12:00:00Z'); 
+            const year = date.getFullYear(); 
+            const monthIndex = date.getMonth(); 
+            const day = date.getDate().toString(); 
+
+            memberIds.forEach(personnelId => { 
+                const presenceRow = allPresencesMap.get(`${personnelId}-${year}`); 
+                if (presenceRow) { 
+                    const monthDataStr = presenceRow[monthIndex + 2]; 
+                    if (monthDataStr) { 
+                        try { 
+                            const monthData = JSON.parse(monthDataStr); 
+                            if (monthData[day] && monthData[day].s) { 
+                                schedule[personnelId][dateStr] = monthData[day].s; 
+                            } 
+                        } catch (e) { /* Ignorer erreur parsing */ } 
+                    } 
+                } 
+            }); 
+        }); 
+
+        return { teamName: teamName, weekDates: weekDatesISO, schedule, teamMembers, error: null }; 
+    } catch (e) { 
+        Logger.log(`Erreur getWeeklyTeamSchedule_Optimized: ${e.stack}`); 
+        return { error: e.message }; 
+    } 
+}
+
+ /**
+ * =================================================================================
+ * BLOC DE GÉNÉRATION DE PLANNING ANNUEL (VERSION FIABLE)
+ * =================================================================================
+ */
+
+/**
+ * Crée un menu personnalisé dans l'interface de Google Sheets au démarrage.
+ * Ce menu permet de lancer facilement la génération des plannings.
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('⚙️ Actions Planning')
+    .addItem('Générer les plannings 2026', 'generate2026Schedules')
+    .addToUi();
+}
+
+/**
+ * Fonction principale appelée par le menu.
+ * Elle prépare et lance la génération pour l'année 2026 et affiche
+ * un message de confirmation à l'utilisateur.
+ */
+function generate2026Schedules() {
+  const yearToGenerate = 2026;
+  const result = _generateYearlySchedules(yearToGenerate);
+  
+  const ui = SpreadsheetApp.getUi();
+  if (result.error) {
+    ui.alert('Erreur de génération', `Une erreur est survenue : ${result.error}`, ui.ButtonSet.OK);
+  } else {
+    const message = `Opération terminée avec succès.\n\n` +
+                    `▶️ ${result.created} planning(s) créé(s) pour ${yearToGenerate}.\n` +
+                    `▶️ ${result.skipped} planning(s) ignoré(s) car ils existaient déjà.`;
+    ui.alert('Génération des plannings 2026 terminée', message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * [NOYAU DE LA LOGIQUE FIABLE] Génère les plannings pour une année donnée pour TOUT le personnel.
+ * Elle utilise la fonction _calculateShiftForDate pour déterminer le quart théorique de chaque jour,
+ * ce qui garantit la continuité parfaite des cycles 2*8 et 3*8, indépendamment des congés
+ * ou absences de l'année précédente.
+ *
+ * @param {number} year L'année pour laquelle générer les plannings.
+ * @returns {object} Un rapport contenant le nombre de plannings créés et ignorés.
+ */
+function _generateYearlySchedules(year) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000); // Attend jusqu'à 30 secondes
+
+  try {
+    Logger.log(`Lancement de la génération des plannings pour l'année ${year}...`);
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const presencesSheet = ss.getSheetByName(FEUILLE_PRESENCES);
+    const allPersonnel = getPersonnel();
+
+    if (allPersonnel.length === 0) {
+      Logger.log("Aucun personnel trouvé. L'opération est annulée.");
+      return { created: 0, skipped: 0, error: "La liste du personnel est vide." };
+    }
+
+    const holidays = getHolidaysForYear(year); // Récupère les jours fériés une seule fois
+    let createdCount = 0;
+    let skippedCount = 0;
+
+    // Boucle sur chaque personne de la liste du personnel
+    for (const person of allPersonnel) {
+      // 1. VÉRIFICATION : On s'assure de ne pas écraser un planning existant
+      if (_findPresenceRowIndex(presencesSheet, person.id, year) !== -1) {
+        Logger.log(`Le planning pour ${person.prenom} ${person.nom} (ID: ${person.id}) pour ${year} existe déjà. Ignoré.`);
+        skippedCount++;
+        continue;
+      }
+
+      const yearlyData = Array(12).fill(0).map(() => ({}));
+      const startDate = new Date(Date.UTC(year, 0, 1));
+      const endDate = new Date(Date.UTC(year, 11, 31));
+
+      // 2. GÉNÉRATION : On parcourt chaque jour de la nouvelle année
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        
+        // C'est ici que la magie opère :
+        // On calcule le quart THÉORIQUE pour ce jour précis. Cette fonction ignore
+        // si la personne était en congé la veille ou la semaine d'avant.
+        // Elle assure une continuité parfaite du cycle.
+        const potentialShift = _calculateShiftForDate(person, new Date(d));
+        
+        if (!potentialShift) continue; // Si pas de quart (ex: type non géré), on passe
+
+        const currentDayOfWeek = d.getUTCDay(); // Dimanche = 0, Lundi = 1...
+        let shouldWork = false;
+
+        // 3. RÈGLES MÉTIER : On applique les règles pour savoir si la personne travaille ce jour-là
+        switch (potentialShift) {
+          case 'J': // Concerne les personnes de journée
+          case 'M':
+            if (currentDayOfWeek >= 1 && currentDayOfWeek <= 5) shouldWork = true; // Lundi à Vendredi
+            break;
+          case 'A':
+            if (typeQuart === '2*8' && dayOfWeek >= 1 && dayOfWeek <= 4) shouldWork = true;
+            // 3*8 ET 9*10 Portugal travaillent 5 jours en Après-Midi
+            else if (['3*8', '9*10 Portugal'].includes(typeQuart) && dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+            break;
+            
+        case 'N':
+            if (['2*8', '3*8'].includes(typeQuart) && dayOfWeek >= 1 && dayOfWeek <= 4) shouldWork = true;
+            // Nuit Portugal travaille 5 jours en Nuit
+            else if (typeQuart === 'Nuit Portugal' && dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+            break;
+        }
+
+        // 4. EXCLUSIONS : On vérifie que le jour n'est ni un week-end (déjà géré), ni un jour férié
+        const dateKey = d.toISOString().slice(0, 10);
+        const isHoliday = !!holidays[dateKey];
+
+        if (shouldWork && !isHoliday) {
+          const monthIndex = d.getUTCMonth();
+          const dayKeyStr = d.getUTCDate().toString();
+          yearlyData[monthIndex][dayKeyStr] = { s: potentialShift };
+        }
+      }
+
+      // 5. AJOUT : On prépare la nouvelle ligne et on l'ajoute à la feuille Google Sheets
+      const newRowData = [
+        person.id,
+        year,
+        ...yearlyData.map(monthData => Object.keys(monthData).length > 0 ? JSON.stringify(monthData) : '')
+      ];
+      presencesSheet.appendRow(newRowData);
+      Logger.log(`Planning ${year} généré pour ${person.prenom} ${person.nom}.`);
+      createdCount++;
+    }
+
+    // On met à jour le "timestamp" pour que l'application se rafraîchisse chez les utilisateurs
+    if (createdCount > 0) {
+      _updateLastModified();
+    }
+
+    Logger.log(`Génération terminée. ${createdCount} plannings créés, ${skippedCount} ignorés.`);
+    return { created: createdCount, skipped: skippedCount };
+
+  } catch (e) {
+    Logger.log(`ERREUR CRITIQUE dans _generateYearlySchedules: ${e.stack}`);
+    return { created: 0, skipped: 0, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * [NOUVELLE FONCTION ANNUELLE] Archive les données de planning de l'année précédente.
+ * Copie les données dans une nouvelle feuille d'archive et les supprime de la feuille active.
+ * @param {number} yearToArchive L'année à archiver (ex: 2024).
+ * @returns {object} Un rapport sur l'opération.
+ */
+function archivePreviousYearSchedules(yearToArchive) {
+  // Sécurité : Seul un administrateur peut exécuter cette action.
+  const userRole = _getUserRole(Session.getActiveUser().getEmail());
+  if (userRole !== 'Administrateur') {
+    throw new Error("Accès refusé. Seuls les administrateurs peuvent archiver les plannings.");
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const presencesSheet = ss.getSheetByName(FEUILLE_PRESENCES);
+    const archiveSheetName = `Archives_Présences_${yearToArchive}`;
+
+    // Étape 1 : Vérifier si l'archive existe déjà
+    if (ss.getSheetByName(archiveSheetName)) {
+      Logger.log(`La feuille d'archive '${archiveSheetName}' existe déjà. Opération annulée.`);
+      return { success: true, message: `L'archive pour ${yearToArchive} existait déjà. Aucune action effectuée.` };
+    }
+
+    // Étape 2 : Récupérer toutes les lignes de l'année à archiver
+    const allPersonnelIds = getPersonnel().map(p => p.id);
+    const rowsToArchive = _fetchPresenceDataForUsers(allPersonnelIds, [yearToArchive]);
+
+    if (rowsToArchive.length === 0) {
+      Logger.log(`Aucune donnée de planning trouvée pour ${yearToArchive}. Opération annulée.`);
+      return { success: true, message: `Aucune donnée trouvée pour ${yearToArchive}.` };
+    }
+
+    // Étape 3 : Créer la nouvelle feuille d'archive et y copier les données
+    const archiveSheet = ss.insertSheet(archiveSheetName, 0);
+    const headers = presencesSheet.getRange(1, 1, 1, presencesSheet.getLastColumn()).getValues();
+    archiveSheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
+    archiveSheet.getRange(2, 1, rowsToArchive.length, rowsToArchive[0].length).setValues(rowsToArchive);
+    Logger.log(`${rowsToArchive.length} lignes archivées dans '${archiveSheetName}'.`);
+
+    // Étape 4 : Supprimer les lignes archivées de la feuille active "Présences_Optimisées"
+    const indexValues = presencesSheet.getRange(2, 1, presencesSheet.getLastRow() - 1, 2).getValues();
+    const rowsToDelete = [];
+    for (let i = 0; i < indexValues.length; i++) {
+      if (String(indexValues[i][1]) == String(yearToArchive)) {
+        rowsToDelete.push(i + 2); // +2 car le tableau est base 0 et la data commence à la ligne 2
+      }
+    }
+
+    // Supprimer en ordre décroissant pour ne pas perturber les index
+    rowsToDelete.sort((a, b) => b - a).forEach(rowIndex => {
+      presencesSheet.deleteRow(rowIndex);
+    });
+    Logger.log(`${rowsToDelete.length} lignes supprimées de la feuille active.`);
+
+    _updateLastModified();
+    return { success: true, message: `${rowsToDelete.length} ligne(s) de ${yearToArchive} ont été archivées et nettoyées.` };
+
+  } catch (e) {
+    Logger.log(`Erreur lors de l'archivage: ${e.stack}`);
+    return { error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/**
+ * [NOUVELLE FONCTION ANNUELLE] Génère les plannings pour l'année suivante.
+ * Se base sur le quart de travail de la dernière semaine de l'année en cours
+ * pour assurer une transition de cycle parfaite.
+ * @param {number} yearToGenerate L'année pour laquelle générer les plannings (ex: 2025).
+ * @returns {object} Un rapport sur le nombre de plannings créés/ignorés.
+ */
+function generateNextYearSchedules(yearToGenerate) {
+  // Sécurité
+  const userRole = _getUserRole(Session.getActiveUser().getEmail());
+  if (userRole !== 'Administrateur') {
+    throw new Error("Accès refusé. Seuls les administrateurs peuvent générer les plannings.");
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    Logger.log(`Lancement de la génération des plannings pour l'année ${yearToGenerate}...`);
+    const previousYear = yearToGenerate - 1;
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const presencesSheet = ss.getSheetByName(FEUILLE_PRESENCES);
+    const allPersonnel = getPersonnel();
+
+    if (allPersonnel.length === 0) {
+      return { created: 0, skipped: 0, error: "La liste du personnel est vide." };
+    }
+
+    const holidays = getHolidaysForYear(yearToGenerate);
+    let createdCount = 0;
+    let skippedCount = 0;
+    
+    // On récupère les données de l'année précédente pour déterminer le cycle
+    const presenceDataPreviousYear = _fetchPresenceDataForUsers(allPersonnel.map(p => p.id), [previousYear]);
+    const presenceMap = new Map();
+    presenceDataPreviousYear.forEach(row => {
+      presenceMap.set(row[0], row); // Clé: personnelId, Valeur: la ligne de données
+    });
+    
+    const getShiftForDate_backend = (personnelId, date) => {
+        const presenceRow = presenceMap.get(personnelId);
+        if (!presenceRow) return null;
+        const m = date.getUTCMonth();
+        const d = date.getUTCDate().toString();
+        const monthDataStr = presenceRow[m + 2];
+        if (!monthDataStr) return null;
+        try {
+            const monthData = JSON.parse(monthDataStr);
+            return (monthData[d] && monthData[d].s) ? monthData[d].s : null;
+        } catch (e) { return null; }
+    };
+
+    // On boucle sur chaque personne
+    for (const person of allPersonnel) {
+      if (_findPresenceRowIndex(presencesSheet, person.id, yearToGenerate) !== -1) {
+        skippedCount++;
+        continue;
+      }
+
+      // --- Logique de transition de cycle ---
+      let personForGeneration = { ...person };
+      if (person.typeQuart === '2*8' || person.typeQuart === '3*8') {
+        const lastDayOfPrevYear = new Date(Date.UTC(previousYear, 11, 31));
+        const dayOfWeek = lastDayOfPrevYear.getUTCDay();
+        const mondayOfLastWeek = new Date(lastDayOfPrevYear);
+        mondayOfLastWeek.setUTCDate(lastDayOfPrevYear.getUTCDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+
+        // On détermine le quart dominant de la dernière semaine
+        const dominantShift = _getDominantShiftForWeek(person, mondayOfLastWeek, getShiftForDate_backend);
+        
+        // Si on trouve un quart, on l'utilise comme nouveau point de départ
+        if (dominantShift) {
+           personForGeneration.quartDefaut = dominantShift;
+        }
+      }
+      
+      // Le reste de la logique est similaire à _generateYearlySchedules
+      const yearlyData = Array(12).fill(0).map(() => ({}));
+      const startDate = new Date(Date.UTC(yearToGenerate, 0, 1));
+      const endDate = new Date(Date.UTC(yearToGenerate, 11, 31));
+
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const potentialShift = _calculateShiftForDate(personForGeneration, new Date(d));
+        if (!potentialShift) continue;
+
+        const currentDayOfWeek = d.getUTCDay();
+        let shouldWork = false;
+
+        switch (potentialShift) {
+          case 'J': case 'M':
+            if (currentDayOfWeek >= 1 && currentDayOfWeek <= 5) shouldWork = true;
+            break;
+          case 'A':
+            if (typeQuart === '2*8' && dayOfWeek >= 1 && dayOfWeek <= 4) shouldWork = true;
+            // 3*8 ET 9*10 Portugal travaillent 5 jours en Après-Midi
+            else if (['3*8', '9*10 Portugal'].includes(typeQuart) && dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+            break;
+            
+        case 'N':
+            if (['2*8', '3*8'].includes(typeQuart) && dayOfWeek >= 1 && dayOfWeek <= 4) shouldWork = true;
+            // Nuit Portugal travaille 5 jours en Nuit
+            else if (typeQuart === 'Nuit Portugal' && dayOfWeek >= 1 && dayOfWeek <= 5) shouldWork = true;
+            break;
+        }
+        
+        const dateKey = d.toISOString().slice(0, 10);
+        const isHoliday = !!holidays[dateKey];
+
+        if (shouldWork && !isHoliday) {
+          const monthIndex = d.getUTCMonth();
+          const dayKeyStr = d.getUTCDate().toString();
+          yearlyData[monthIndex][dayKeyStr] = { s: potentialShift };
+        }
+      }
+
+      const newRowData = [
+        person.id, yearToGenerate,
+        ...yearlyData.map(monthData => Object.keys(monthData).length > 0 ? JSON.stringify(monthData) : '')
+      ];
+      presencesSheet.appendRow(newRowData);
+      createdCount++;
+    }
+
+    if (createdCount > 0) {
+      _updateLastModified();
+    }
+
+    return { created: createdCount, skipped: skippedCount };
+
+  } catch (e) {
+    Logger.log(`ERREUR CRITIQUE dans generateNextYearSchedules: ${e.stack}`);
+    return { created: 0, skipped: 0, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * =================================================================================
+ * MODULE CHARGE CAPA - PILOTAGE INDUSTRIEL (Gestion Fine des Vendredis & Réel)
+ * =================================================================================
+ */
+
+const DISPLAY_POSTES = ['DRA718', 'DRA716', 'DRA715', 'DRA714'];
+const FEUILLE_CAPA_REEL = "Capa_Reel";
+
+// Initialisation de la feuille "Réel" si elle n'existe pas sur le nouveau fichier
+function _initCapaReelSheet() {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let sheet = ss.getSheetByName(FEUILLE_CAPA_REEL);
+    if (!sheet) {
+        sheet = ss.insertSheet(FEUILLE_CAPA_REEL);
+        sheet.appendRow(["Année", "Semaine", "Poste", "Réel"]);
+    }
+    return sheet;
+}
+
+// Sauvegarde de la saisie du "Réel"
+function saveCapaReel(year, week, poste, value) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(15000);
+    try {
+        const sheet = _initCapaReelSheet();
+        const data = sheet.getDataRange().getValues();
+        let found = false;
+        
+        for (let i = 1; i < data.length; i++) {
+            if (data[i][0] == year && data[i][1] == week && data[i][2] == poste) {
+                if (value === "" || value === null) {
+                    sheet.getRange(i + 1, 4).clearContent();
+                } else {
+                    sheet.getRange(i + 1, 4).setValue(value);
+                }
+                found = true;
+                break;
+            }
+        }
+        
+        if (!found && value !== "" && value !== null) {
+            sheet.appendRow([year, week, poste, value]);
+        }
+        return { success: true };
+    } catch(e) {
+        return { error: e.message };
+    } finally {
+        lock.releaseLock();
+    }
+}
+
+// Récupération des valeurs réelles d'une année
+function _getCapaReel(year) {
+    try {
+        const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(FEUILLE_CAPA_REEL);
+        if (!sheet) return {};
+        const data = sheet.getDataRange().getValues();
+        const result = {}; 
+        for (let i = 1; i < data.length; i++) {
+            if (data[i][0] == year) {
+                const week = data[i][1];
+                const poste = data[i][2];
+                const val = data[i][3];
+                if (!result[poste]) result[poste] = {};
+                result[poste][week] = val;
+            }
+        }
+        return result;
+    } catch(e) { 
+        return {}; 
+    }
+}
+
+function _fetchReferenceTargets(year, displayPostes) {
+  const config = getConfiguration();
+  const activeRules = config.capaRules || {};
+
+  // --- MODE MANUEL (52 SEMAINES) ---
+  if (config.targetMode === 'manuel') {
+    const targetsByStation = {};
+    displayPostes.forEach(p => {
+      targetsByStation[p] = {};
+      for (let w = 1; w <= 52; w++) {
+        // Lecture de l'objectif par semaine (0 par défaut si non défini)
+        targetsByStation[p][w] = (config.manualTargets && config.manualTargets[p] && config.manualTargets[p][w] !== undefined) ? Number(config.manualTargets[p][w]) : 0;
+      }
+    });
+    return targetsByStation;
+  }
+
+  // --- MODE AUTO (FICHIER EXTERNE ADECC) ---
+  const mappingSignature = displayPostes.map(p => (activeRules[p] && activeRules[p].mapping) ? activeRules[p].mapping : '').join('|');
+  const hash = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, mappingSignature)).slice(0, 10);
+  const CACHE_KEY = `targets_ref_${year}_${hash}_v4`;
+
+  return getOrSetCache(CACHE_KEY, 3600, () => {
+    const EXTERNAL_ID = "1m_1QjM77r2GNAn6Utv9ExGk2yobKHayrHELJMI0h4Vk";
+    const SHEET_NAMES = ['PPR_F10X', 'PPR_H175', 'PPR_LR', 'PPR_MA', 'PPR_SA', 'PPR_XWB'];
+    const targetsByStation = {};
+    
+    displayPostes.forEach(p => targetsByStation[p] = {});
+
+    try {
+      const ss = SpreadsheetApp.openById(EXTERNAL_ID);
+      SHEET_NAMES.forEach(sheetName => {
+        const sheet = ss.getSheetByName(sheetName);
+        if (!sheet) return;
+        const data = sheet.getDataRange().getValues();
+        if (data.length < 2) return;
+        
+        const headers = data[0];
+        const colMap = {};
+        
+        for (let i = 1; i < headers.length; i++) {
+          let rawHeader = String(headers[i]).trim();
+          let cleanHeader = rawHeader.replace(/^PPR\s+/i, '').trim();
+          for (const poste of displayPostes) {
+            const rule = activeRules[poste] || {};
+            const targetColumnName = rule.mapping || poste;
+            if (cleanHeader === targetColumnName) {
+              colMap[i] = poste;
+              break;
+            }
+          }
+        }
+        
+        if (Object.keys(colMap).length > 0) {
+          for (let r = 1; r < data.length && r <= 52; r++) {
+            const weekNum = r;
+            Object.keys(colMap).forEach(colIndex => {
+              const station = colMap[colIndex];
+              const val = Number(data[r][colIndex]) || 0;
+              targetsByStation[station][weekNum] = (targetsByStation[station][weekNum] || 0) + val;
+            });
+          }
+        }
+      });
+      return targetsByStation;
+    } catch (e) {
+      Logger.log("Erreur lecture Cibles: " + e.message);
+      return targetsByStation;
+    }
+  });
+}
+
+function getCapaDashboardData(year) {
+  try {
+    const config = getConfiguration();
+    const displayPostes = (config.capaWorkstations && config.capaWorkstations.length > 0) ? config.capaWorkstations : ['DRA718', 'DRA716', 'DRA715', 'DRA714'];
+    const activeRules = config.capaRules || {};
+    
+    const globalTargets = _fetchReferenceTargets(year, displayPostes);
+    
+    // 🔴 MODIFICATION ICI: On passe 'activeRules' en 3ème argument
+    const staffByShift = _calculateStaffingByShift(year, displayPostes, activeRules);
+        const reelData = _getCapaReel(year); 
+        
+        const consolidatedData = {};
+        
+        displayPostes.forEach(workstation => {
+            consolidatedData[workstation] = { weeks: [], data: [] };
+            const rule = activeRules[workstation] || { cycle: '2x8', maxStaffDay: 15, maxCapDay: 1.9 };
+
+            for (let w = 1; w <= 52; w++) {
+                const weekKey = `S${w.toString().padStart(2, '0')}`;
+                const target = (globalTargets[workstation] && globalTargets[workstation][w]) ? globalTargets[workstation][w] : 0;
+                const realValue = (reelData[workstation] && reelData[workstation][w] !== undefined) ? reelData[workstation][w] : null;
+                const weekData = (staffByShift[workstation] && staffByShift[workstation][w]) ? staffByShift[workstation][w] : { M: {base:0, hs:0}, A: {base:0, hs:0}, N: {base:0, hs:0}, J: {base:0, hs:0} };
+
+                // ETP (Equivalent Temps Plein) calculés en DHT
+                const etpBaseM = (weekData.M.base / 80) / 5;
+                const etpBaseA = (weekData.A.base / 80) / 5;
+                const etpBaseN = (weekData.N.base / 66) / 5;
+                const etpBaseJ = (weekData.J.base / 80) / 5;
+
+                const etpHsM = (weekData.M.hs / 80) / 5;
+                const etpHsA = (weekData.A.hs / 80) / 5;
+                const etpHsN = (weekData.N.hs / 66) / 5;
+                const etpHsJ = (weekData.J.hs / 80) / 5;
+
+let capaBaseM, capaBaseA, capaBaseN, capaBaseJ;
+                let capaHsM, capaHsA, capaHsN, capaHsJ;
+
+                if (rule.calcMode === 'reel') {
+                    // MODE TEMPS RÉEL : (Heures présentes réelles / Temps de prod d'un avion)
+                    const prodTime = rule.prodTime || 10; // Sécurité anti-division par 0
+                    
+                    // On divise par 10 car la base est en DHT (dixièmes d'heures)
+                    capaBaseM = (weekData.M.base / 10) / prodTime;
+                    capaBaseA = (weekData.A.base / 10) / prodTime;
+                    capaBaseN = (weekData.N.base / 10) / prodTime;
+                    capaBaseJ = (weekData.J.base / 10) / prodTime;
+                    
+                    capaHsM = (weekData.M.hs / 10) / prodTime;
+                    capaHsA = (weekData.A.hs / 10) / prodTime;
+                    capaHsN = (weekData.N.hs / 10) / prodTime;
+                    capaHsJ = (weekData.J.hs / 10) / prodTime;
+                } else {
+                    // MODE THÉORIQUE (Ancien comportement basé sur les ETP / Objectifs max)
+                    capaBaseM = _getCapacityFromRule(etpBaseM, rule, 'M') * 5;
+                    capaBaseA = _getCapacityFromRule(etpBaseA, rule, 'A') * 5;
+                    capaBaseN = _getCapacityFromRule(etpBaseN, rule, 'N') * 5;
+                    capaBaseJ = _getCapacityFromRule(etpBaseJ, rule, 'J') * 5;
+
+                    capaHsM = _getCapacityFromRule(etpHsM, rule, 'M') * 5;
+                    capaHsA = _getCapacityFromRule(etpHsA, rule, 'A') * 5;
+                    capaHsN = _getCapacityFromRule(etpHsN, rule, 'N') * 5;
+                    capaHsJ = _getCapacityFromRule(etpHsJ, rule, 'J') * 5;
+                }
+
+                const totalWeeklyCapaHs = capaHsM + capaHsA + capaHsN + capaHsJ;
+                const totalWeeklyCapacity = capaBaseM + capaBaseA + capaBaseN + capaBaseJ + totalWeeklyCapaHs;
+                const totalDailyCapacity = totalWeeklyCapacity / 5;
+
+                const totalHsHours = (weekData.M.hs + weekData.A.hs + weekData.N.hs + weekData.J.hs) / 10;
+                const totalStaffETP = etpBaseM + etpBaseA + etpBaseN + etpBaseJ;
+
+                consolidatedData[workstation].weeks.push(weekKey);
+consolidatedData[workstation].data.push({
+                    week: w, 
+                    target: target, 
+                    reel: realValue,
+                    totalActualStaff: totalStaffETP.toFixed(1),
+                    dailyAdvance: totalDailyCapacity, 
+                    realCapacity: totalWeeklyCapacity,
+                    teamCount: rule.cycle === '3x8' ? 3 : 2,
+                    breakdown: { 
+                        M: capaBaseM + capaBaseJ, 
+                        A: capaBaseA, 
+                        N: capaBaseN,
+                        HS: totalWeeklyCapaHs
+                    },
+                    staffBreakdown: { 
+                        M: etpBaseM + etpBaseJ,
+                        A: etpBaseA,
+                        N: etpBaseN
+                    },
+                    hsHours: totalHsHours,
+                    coverage: target > 0 ? (totalWeeklyCapacity / target) * 100 : 100,
+                    status: totalWeeklyCapacity < (target - 0.2) ? 'sous-capacite' : 'conforme',
+                    rule: rule // <--- AJOUTE CETTE LIGNE ICI POUR TRANSMETTRE LES PARAMÈTRES
+                });
+            }
+        });
+
+        return consolidatedData;
+    } catch (e) {
+        Logger.log("Erreur dans getCapaDashboardData : " + e.stack);
+        return { error: e.message };
+    }
+}
+
+function _getCapacityFromRule(staffCount, rule, shiftType) {
+    if (staffCount === 0) return 0;
+    
+    let maxStaff = rule.maxStaffDay || 10;
+    let maxCap = rule.maxCapDay || 1.9;
+    
+    if (rule.cycle === '3x8' && shiftType === 'N') {
+        maxStaff = rule.maxStaffNight || 9;
+        maxCap = rule.maxCapNight || 1.2;
+    }
+    
+    // Récupération du TRS (100% par défaut si non défini)
+    const trs = rule.trs !== undefined ? rule.trs : 100;
+    
+    // Calcul de la capacité théorique pondérée par le TRS
+    return ((staffCount / maxStaff) * maxCap) * (trs / 100);
+}
+
+function _calculateStaffingByShift(year, displayPostes, activeRules) {
+  const allPersonnel = getPersonnel();
+  const presenceData = _fetchPresenceDataForUsers(allPersonnel.map(p => p.id), [year]);
+  const counts = {};
+  const presenceMap = new Map(presenceData.map(r => [r[0], r]));
+
+  const getWeek = (d) => {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  };
+  
+  const DHT_VALUES = { 'M': 80, 'A': 80, 'J': 77.5, 'N': 66, '4HCP': 40, '4HF': 40 };
+
+  allPersonnel.forEach(person => {
+    if (!person.posteDeTravail) return;
+    let postes = person.posteDeTravail.split(',').map(s => s.trim());
+
+    // --- NOUVEAU: Identification des groupes fusionnés ---
+    let matchedGroups = [];
+    displayPostes.forEach(groupKey => {
+        const rule = activeRules[groupKey] || {};
+        const includedStr = rule.includedStations || groupKey;
+        const includedList = includedStr.split(',').map(s => s.trim());
+        
+        // On compte combien de postes de la personne font partie de ce groupe CAPA
+        const matchCount = postes.filter(p => includedList.includes(p)).length;
+        if (matchCount > 0) {
+            matchedGroups.push({
+                key: groupKey,
+                weight: (matchCount / postes.length) * (person.tauxEfficacite !== undefined ? (Number(person.tauxEfficacite) / 100) : 1)
+            });
+        }
+    });
+
+    if (matchedGroups.length === 0) return;
+
+    const userRow = presenceMap.get(person.id);
+    if (!userRow) return;
+
+    matchedGroups.forEach(group => {
+      const posteKey = group.key;
+      const weight = group.weight;
+      
+      if (!counts[posteKey]) counts[posteKey] = {};
+      
+      for (let m = 0; m < 12; m++) {
+        try {
+          const monthData = JSON.parse(userRow[m + 2] || '{}');
+          for (const [day, data] of Object.entries(monthData)) {
+            const dateObj = new Date(Date.UTC(year, m, parseInt(day)));
+            const w = getWeek(dateObj);
+            if (w >= 1 && w <= 52) {
+              if (!counts[posteKey][w]) {
+                counts[posteKey][w] = { M: {base:0, hs:0}, A: {base:0, hs:0}, N: {base:0, hs:0}, J: {base:0, hs:0} };
+              }
+              const status = data.s;
+              let baseDht = DHT_VALUES[status] || 0;
+              let hsDht = (parseFloat(data.hs) || 0) * 10;
+
+              if (baseDht > 0 || hsDht !== 0) {
+                let shift = ['M', 'A', 'N', 'J'].includes(status) ? status : calculateShiftForDate(person, dateObj);
+                if (!['M', 'A', 'N', 'J'].includes(shift)) shift = 'J';
+
+                counts[posteKey][w][shift].base += (baseDht * weight);
+                counts[posteKey][w][shift].hs += (hsDht * weight);
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    });
+  });
+  return counts;
+}
+
+function getAvailableCapaStations() {
+    // Changement de clé de cache pour forcer le rafraîchissement
+    const CACHE_KEY = 'available_capa_stations_meaulte_v1'; 
+    return getOrSetCache(CACHE_KEY, 86400, () => { 
+        const EXTERNAL_ID = "1m_lQjM77r2GNAn6Utv9ExGk2yobKHayrHELJMI0h4Vk";
+        const SHEET_NAMES = ['PPR_F10X', 'PPR_H175', 'PPR_LR', 'PPR_MA', 'PPR_SA', 'PPR_XWB'];
+        const stations = new Set();
+        
+        try {
+            const ss = SpreadsheetApp.openById(EXTERNAL_ID);
+            
+            SHEET_NAMES.forEach(sheetName => {
+                const sheet = ss.getSheetByName(sheetName);
+                if (!sheet) return; // Ignore la feuille si elle n'existe pas
+                
+                // On ne lit que la ligne d'en-tête (Ligne 1) pour optimiser
+                const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+                
+                // On commence à i = 1 (Colonne B) pour sauter la colonne des semaines
+                for (let i = 1; i < headers.length; i++) {
+                    let label = String(headers[i]).trim();
+                    if (label) {
+                        // Supprime "PPR " au début (insensible à la casse)
+                        label = label.replace(/^PPR\s+/i, '').trim();
+                        if (label) stations.add(label);
+                    }
+                }
+            });
+            
+            return Array.from(stations).sort();
+            
+        } catch (e) {
+            Logger.log("Erreur lecture PPR Méaulte (Stations): " + e.message);
+            // Fallback de sécurité
+            return ['DRA718', 'DRA716', 'DRA715', 'DRA714']; 
+        }
+    });
+}
+
+/**
+ * Sauvegarde le commentaire et les heures supplémentaires en même temps.
+ */
+function savePresenceDetails(personnelId, dateKey, comment, hs) {
+  // 1. Verrouillage pour éviter les conflits d'écriture
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  
+  try {
+    // 2. Sécurité : Vérification des droits (identique à setPresence)
+    _ensureModificationIsAllowed(Session.getActiveUser().getEmail(), personnelId);
+
+    // 3. Connexion au fichier avec VOS constantes
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(FEUILLE_PRESENCES);
+    
+    if (!sheet) throw new Error(`Feuille "${FEUILLE_PRESENCES}" introuvable.`);
+
+    const data = sheet.getDataRange().getValues();
+    const parts = dateKey.split('-');
+    const year = parts[0];
+    const monthIndex = parseInt(parts[1], 10);
+    // On retire le zéro initial du jour pour matcher les clés JSON (ex: "05" devient "5")
+    const dayStr = parseInt(parts[2], 10).toString(); 
+    
+    const monthCol = monthIndex + 2; // Décalage des colonnes (ex: Janvier = mois 1 -> Col 3)
+
+    // 4. Recherche de la ligne correspondante
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] == personnelId && data[i][1] == year) {
+        let monthData = {};
+        
+        // Lecture de la donnée JSON existante
+        try { 
+          if (data[i][monthCol - 1]) {
+            monthData = JSON.parse(data[i][monthCol - 1]); 
+          }
+        } catch(e) {}
+
+        if (!monthData[dayStr]) monthData[dayStr] = {};
+        
+        // --- A. Sauvegarde du commentaire ---
+        if (comment === "" || comment == null) {
+          delete monthData[dayStr].c;
+        } else {
+          monthData[dayStr].c = comment;
+        }
+        
+        // --- B. Sauvegarde des heures supplémentaires ---
+        const parsedHs = parseFloat(hs);
+        if (isNaN(parsedHs) || parsedHs === 0) {
+          delete monthData[dayStr].hs;
+        } else {
+          monthData[dayStr].hs = parsedHs;
+        }
+
+        // --- C. Nettoyage si la case est totalement vide ---
+        if (Object.keys(monthData[dayStr]).length === 0) {
+          delete monthData[dayStr];
+        }
+
+        // 5. Écriture finale
+        sheet.getRange(i + 1, monthCol).setValue(JSON.stringify(monthData));
+        
+        return { success: true, newTimestamp: new Date().getTime() };
+      }
+    }
+    
+    throw new Error("Ligne introuvable pour ce collaborateur sur cette année.");
+    
+  } catch(e) {
+    throw new Error(e.message);
+  } finally {
+    // Libération du verrou pour les autres utilisateurs
+    lock.releaseLock();
+  }
+}
+
+/** * =================================================================================
+ * FONCTIONS BATCH (MODIFICATION GROUPÉE)
+ * Permet de traiter plusieurs employés en une seule requête depuis le front-end
+ * =================================================================================
+ */
+
+/**
+ * Récupère les statuts existants pour un groupe de personnes.
+ * Utilisé pour la fonction d'annulation (Undo).
+ * @param {Array<string>} personnelIds Liste des IDs.
+ * @param {string} startDateStr Date de début.
+ * @param {string} endDateStr Date de fin.
+ * @returns {Object} Objet contenant les statuts par ID.
+ */
+function getStatusesForDateRangeBatch(personnelIds, startDateStr, endDateStr) {
+  const batchResult = {};
+  try {
+    for (const id of personnelIds) {
+      batchResult[id] = getStatusesForDateRange(id, startDateStr, endDateStr);
+    }
+    return batchResult;
+  } catch (e) {
+    Logger.log(`Erreur getStatusesForDateRangeBatch: ${e.stack}`);
+    return { error: e.message };
+  }
+}
+
+/**
+ * Applique un statut sur une plage de dates pour un groupe de personnes.
+ * @param {Array<string>} personnelIds Liste des IDs.
+ * @param {string} startDateStr Date de début.
+ * @param {string} endDateStr Date de fin.
+ * @param {string} status Statut à appliquer.
+ */
+function setPresenceForDateRangeBatch(personnelIds, startDateStr, endDateStr, status, loc = null) {
+  let finalTimestamp;
+  try {
+    for (const id of personnelIds) {
+      const result = setPresenceForDateRange(id, startDateStr, endDateStr, status, loc); // <-- Ajout de loc
+      
+      if (result && result.error) {
+        throw new Error(`Échec pour l'employé ID ${id} : ${result.error}`);
+      }
+      if (result && result.newTimestamp) {
+        finalTimestamp = result.newTimestamp;
+      }
+    }
+    return { success: true, newTimestamp: finalTimestamp || _updateLastModified() };
+  } catch (e) {
+    Logger.log(`Erreur setPresenceForDateRangeBatch: ${e.stack}`);
+    return { error: e.message };
+  }
+}
+
+/**
+ * Restaure les présences d'un groupe de personnes (Annulation d'une modif groupée).
+ * @param {Object} oldStatusesBatch Objet contenant les présences à restaurer par ID.
+ */
+function restorePresencesBatch(oldStatusesBatch) {
+  let finalTimestamp;
+  try {
+    for (const personnelId in oldStatusesBatch) {
+      const presencesToRestore = oldStatusesBatch[personnelId];
+      const result = restorePresences(personnelId, presencesToRestore);
+      
+      if (result && result.error) {
+        throw new Error(`Échec de la restauration pour l'ID ${personnelId} : ${result.error}`);
+      }
+      if (result && result.newTimestamp) {
+        finalTimestamp = result.newTimestamp;
+      }
+    }
+    return { success: true, newTimestamp: finalTimestamp || _updateLastModified() };
+  } catch (e) {
+    Logger.log(`Erreur restorePresencesBatch: ${e.stack}`);
+    return { error: e.message };
+  }
+}
+
+/**
+ * [NOUVELLE FONCTION] Exporte le personnel filtré dans un NOUVEAU fichier Google Sheets.
+ * @param {Array<string>} selectedRoles Les rôles à inclure dans l'export.
+ * @returns {Object} Statut de l'opération et URL du nouveau fichier.
+ */
+/**
+ * [NOUVELLE FONCTION] Exporte le personnel filtré dans un NOUVEAU fichier Google Sheets.
+ * @param {Array<string>} selectedRoles Les rôles à inclure dans l'export.
+ * @returns {Object} Statut de l'opération et URL du nouveau fichier.
+ */
+function exportPersonnelByRolesToNewFile(selectedRoles) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  
+  try {
+    const userEmail = Session.getActiveUser().getEmail();
+    const userRole = _getUserRole(userEmail);
+    
+    if (userRole !== 'Administrateur') {
+      throw new Error("Accès refusé. Action réservée aux administrateurs.");
+    }
+
+    if (!selectedRoles || selectedRoles.length === 0) {
+      throw new Error("Veuillez sélectionner au moins un rôle.");
+    }
+
+    const allPersonnel = getPersonnel(false); 
+    const filteredPersonnel = allPersonnel.filter(p => selectedRoles.includes(p.role));
+
+    if (filteredPersonnel.length === 0) {
+      throw new Error("Aucun personnel trouvé pour cette sélection de rôles.");
+    }
+
+    // 1. Création du nouveau fichier AVEC HORODATAGE
+    const timeStamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd_MM_yyyy_HH_mm");
+    const fileName = `Export_Personnel_${timeStamp}`;
+    const newSs = SpreadsheetApp.create(fileName);
+    const newSheet = newSs.getSheets()[0];
+    newSheet.setName("Extract");
+
+    // 2. Gestion de la propriété du fichier
+    try {
+      // Tente de donner la propriété absolue à la personne qui a cliqué
+      DriveApp.getFileById(newSs.getId()).setOwner(userEmail);
+    } catch (shareErr) {
+      // Fallback : Si Workspace bloque le transfert, on l'ajoute au moins en éditeur
+      DriveApp.getFileById(newSs.getId()).addEditor(userEmail);
+    }
+
+    // 3. Préparation et écriture des données
+    const headers = ["Prénom", "Nom", "Matricule", "Rôle", "Postes", "N° Section"];
+    const dataToWrite = [headers];
+
+    filteredPersonnel.forEach(p => {
+      dataToWrite.push([
+        p.prenom || "", p.nom || "", p.matricule || "", 
+        p.role || "", p.posteDeTravail || "", p.section || ""
+      ]);
+    });
+
+    const range = newSheet.getRange(1, 1, dataToWrite.length, headers.length);
+    range.setValues(dataToWrite);
+
+    // 4. Mise en forme du tableau
+    const headerRange = newSheet.getRange(1, 1, 1, headers.length);
+    headerRange.setFontWeight("bold").setBackground("#00205b").setFontColor("white").setHorizontalAlignment("center");
+    newSheet.getRange(2, 1, filteredPersonnel.length, headers.length).setVerticalAlignment("middle");
+    newSheet.autoResizeColumns(1, headers.length);
+
+    Logger.log(`Extraction réussie pour ${userEmail}. Fichier : ${fileName}`);
+    
+    // On renvoie l'URL du fichier pour l'ouvrir directement côté client
+    return { success: true, url: newSs.getUrl(), count: filteredPersonnel.length };
+
+  } catch (e) {
+    Logger.log(`Erreur exportPersonnelByRolesToNewFile : ${e.message}`);
+    return { error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+const FEUILLE_CIBLES_MANUELLES = "Capa_Cibles_Manuelles";
+
+// Fonction d'initialisation de la feuille
+function _initCapaCiblesSheet() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(FEUILLE_CIBLES_MANUELLES);
+  
+  if (!sheet) {
+    sheet = ss.insertSheet(FEUILLE_CIBLES_MANUELLES);
+    const headers = ["Poste"];
+    for (let i = 1; i <= 52; i++) headers.push("S" + i);
+    sheet.appendRow(headers);
+    
+    // Mise en forme automatique
+    sheet.getRange("A1:BA1").setFontWeight("bold").setBackground("#00205b").setFontColor("white");
+    sheet.setFrozenRows(1);
+    sheet.setFrozenColumns(1);
+  }
+  return sheet;
+}
+
+// Fonction de lecture
+function _readCapaCiblesFromSheet() {
+  const sheet = _initCapaCiblesSheet();
+  const data = sheet.getDataRange().getValues();
+  const manualTargets = {};
+  
+  if (data.length < 2) return manualTargets;
+
+  for (let i = 1; i < data.length; i++) {
+    const poste = data[i][0];
+    if (!poste) continue;
+    manualTargets[poste] = {};
+    for (let w = 1; w <= 52; w++) {
+      manualTargets[poste][w] = data[i][w] || 0;
+    }
+  }
+  return manualTargets;
+}
+
+// Fonction d'écriture
+function _writeCapaCiblesToSheet(manualTargets) {
+  if (!manualTargets) return;
+  const sheet = _initCapaCiblesSheet();
+  
+  const dataToWrite = [];
+  for (const poste in manualTargets) {
+    const row = [poste];
+    for (let w = 1; w <= 52; w++) {
+      row.push(manualTargets[poste][w] || 0);
+    }
+    dataToWrite.push(row);
+  }
+
+  // On efface les anciennes données et on écrase avec les nouvelles
+  if (sheet.getLastRow() > 1) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, 53).clearContent();
+  }
+  if (dataToWrite.length > 0) {
+    sheet.getRange(2, 1, dataToWrite.length, 53).setValues(dataToWrite);
+  }
+}
+
+/**
+ * Aligne tous les plannings avec les nouveaux jours fériés.
+ * Remet les statuts "normaux" sur les anciens jours fériés, et vide les nouveaux.
+ */
+function reapplyHolidaysToSchedules() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const currentYear = new Date().getFullYear();
+    const allPersonnel = getPersonnel();
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(FEUILLE_PRESENCES);
+    
+    for (const person of allPersonnel) {
+      // 1. On regénère l'année en cours (ça répare tous les jours fériés sans écraser les congés)
+      _regenerateFutureSchedule(person, `${currentYear}-01-01`);
+      
+      // 2. Si les plannings de l'année N+1 ont déjà été créés, on les corrige aussi !
+      if (_findPresenceRowIndex(sheet, person.id, currentYear + 1) !== -1) {
+        _regenerateFutureSchedule(person, `${currentYear + 1}-01-01`);
+      }
+    }
+    
+    _updateLastModified();
+    return {success: true};
+  } catch(e) {
+    return {error: e.message};
+  } finally {
+    lock.releaseLock();
+  }
+}

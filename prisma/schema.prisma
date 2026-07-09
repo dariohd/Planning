@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      String   @default("Lecteur")
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Personnel {
+  id                      String     @id
+  matricule               String?
+  nom                     String
+  prenom                  String
+  role                    String
+  chefEquipeAssocie       String?
+  section                 String?
+  typeQuart               String?
+  quartDefaut             String?
+  posteDeTravail          String?
+  mftAssocie              String?
+  responsableHierarchique String?
+  statut                  String     @default("Actif")
+  tauxEfficacite          Int        @default(100)
+  presences               Presence[]
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+
+  @@index([role])
+  @@index([statut])
+  @@index([chefEquipeAssocie])
+}
+
+model Presence {
+  id          String    @id @default(cuid())
+  personnelId String
+  date        String
+  status      String
+  location    String?
+  comment     String?
+  hs          String?
+  personnel   Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([personnelId, date])
+  @@index([personnelId])
+  @@index([date])
+}
+
+model AppMeta {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model AppConfig {
+  id    String @id @default("default")
+  data  Json   @default("{}")
+}

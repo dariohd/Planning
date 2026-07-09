@@ -1,0 +1,305 @@
+<?
+  // 1. Dictionnaire principal de l'impression
+  var dict = {
+    fr: { planning: "Planning :", scope: "Périmètre complet", week: "Semaine du", to: "au", staff: "Personnel (Poste - Mat.)", total: "Total Présents :", nodata: "Aucune donnée.", empty: "Aucun planning à afficher." },
+    en: { planning: "Schedule:", scope: "Full scope", week: "Week from", to: "to", staff: "Staff (Station - ID)", total: "Total Present:", nodata: "No data.", empty: "No schedule to display." },
+    pt: { planning: "Escala:", scope: "Perímetro completo", week: "Semana de", to: "a", staff: "Pessoal (Posto - Mat.)", total: "Total Presentes:", nodata: "Nenhum dado.", empty: "Nenhuma escala para exibir." }
+  };
+  var t = dict[lang] || dict['fr'];
+
+  // 2. Dictionnaire des lettres de statuts (M, A, N, etc.)
+  var statusDict = {
+    fr: { 'J':'J', 'M':'M', 'A':'A', 'N':'N', 'CP':'CP', '4HCP':'½CP', 'JRTT':'JRTT', 'Abs':'Abs', 'RF':'RF', 'Ma':'Ma', 'LMa':'LMa', 'F':'F', '4HF':'½F', 'P':'P', 'Z':'Z', 'S':'S', 'Mi':'Mi', 'Ecole':'Ecole', 'CET':'CET' },
+    en: { 'J':'D', 'M':'M', 'A':'A', 'N':'N', 'CP':'PL', '4HCP':'½PL', 'JRTT':'DO', 'Abs':'Abs', 'RF':'FR', 'Ma':'Si', 'LMa':'LSi', 'F':'T', '4HF':'½T', 'P':'L', 'Z':'O', 'S':'U', 'Mi':'Mi', 'Ecole':'School', 'CET':'CET' },
+    pt: { 'J':'D', 'M':'M', 'A':'T', 'N':'N', 'CP':'Fé', '4HCP':'½Fé', 'JRTT':'Fo', 'Abs':'Flt', 'RF':'MF', 'Ma':'Do', 'LMa':'DoP', 'F':'Tr', '4HF':'½Tr', 'P':'E', 'Z':'O', 'S':'S', 'Mi':'Mi', 'Ecole':'Esc', 'CET':'CET' }
+  };
+  var sTr = statusDict[lang] || statusDict['fr'];
+
+  // 3. Calcul du titre dynamique
+  var docTitle = t.scope;
+  if (schedules && schedules.length > 0) {
+    var tempNames = [];
+    for (var i = 0; i < schedules.length; i++) {
+      if (schedules[i].teamName && schedules[i].teamName !== "Tous" && tempNames.indexOf(schedules[i].teamName) === -1) {
+        tempNames.push(schedules[i].teamName);
+      }
+    }
+    if (tempNames.length > 0) docTitle = tempNames.join(' & ');
+  }
+?>
+<!DOCTYPE html>
+<html lang="<?= lang ?>">
+<head>
+<meta charset="UTF-8">
+<title><?= t.planning ?> <?= docTitle ?></title>
+<style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+        
+        @page { 
+            size: A4 portrait; 
+            margin: 0.5cm; 
+        }
+
+        body { 
+            font-family: 'Poppins', sans-serif; 
+            color: #000; 
+            font-size: 10px; 
+            margin: 0; 
+            padding: 0;
+            -webkit-print-color-adjust: exact; 
+            print-color-adjust: exact;
+        }
+
+        .team-section { 
+            page-break-inside: avoid;
+            page-break-after: auto;
+            width: 100%;
+            margin-bottom: 25px;
+            padding-bottom: 10px;
+        }
+
+        h1 { 
+            font-size: 14px; 
+            font-weight: 700; 
+            margin: 0 0 2px 5px;
+        }
+
+        h2 { 
+            font-size: 11px; 
+            font-weight: 600; 
+            margin: 0 0 8px 5px;
+            color: #444; 
+        }
+
+        /* Cadre arrondi */
+        .table-rounded-wrapper {
+            border: 1px solid #666;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            table-layout: fixed; 
+            border-style: hidden;
+        }
+
+        th, td { 
+            border: 1px solid #666; 
+            padding: 2px 3px; 
+            text-align: center; 
+            height: 18px; 
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        /* Suppression des doubles bordures externes */
+        tr:first-child th { border-top: none; }
+        tr:last-child td { border-bottom: none; }
+        th:first-child, td:first-child { border-left: none; }
+        th:last-child, td:last-child { border-right: none; }
+
+        th { 
+            background-color: #eee; 
+            font-weight: 700; 
+            font-size: 10px;
+        }
+
+        .col-name {
+            width: 35%;
+            text-align: left;
+            padding-left: 8px;
+        }
+
+        /* --- STYLE INTERIMAIRE (FOND BLEU MARINE) --- */
+        .cell-interim {
+            background-color: #d1edf2 !important; /* Bleu Marine clair/cyan */
+            color: #000 !important;
+        }
+        
+        .cell-interim .person-name, 
+        .cell-interim .meta-info {
+            color: #000 !important;
+        }
+
+        /* Ligne de séparation entre les postes */
+        .poste-separator td {
+            border-top: 2px solid #000 !important; /* Ligne noire bien visible */
+        }
+
+        .col-day {
+            width: 9%;
+        }
+
+        .person-name {
+            font-weight: 700;
+        }
+
+        .meta-info {
+            font-weight: 400;
+            font-size: 9px;
+            color: #555;
+            margin-left: 4px;
+        }
+
+        .status-cell { font-weight: 700; font-size: 10px; }
+
+        /* --- COULEURS --- */
+        .status-bg-M { background-color: #A5DFF0 !important; color: #21758A !important; }
+        .status-bg-A { background-color: #dbeafe !important; }
+        .status-bg-N { background-color: #9cb4d4 !important; color: #00205b !important; }
+        .status-bg-J { background-color: #fef9c3 !important; }
+
+        .status-bg-Abs, .status-bg-Ma { background-color: #ef4444 !important; color: #fff !important; }
+        .status-bg-LMa { background-color: #7f1d1d !important; color: #fff !important; }
+        .status-bg-CP, .status-bg-4HCP { background-color: #ec4899 !important; color: #fff !important; }
+        .status-bg-JRTT { background-color: #06b6d4 !important; color: #fff !important; }
+        .status-bg-CET { background-color: #f59e0b !important; color: #fff !important; }
+        .status-bg-EM { background-color: #9333ea !important; color: #fff !important; }
+        .status-bg-Ecole, .status-bg-F, .status-bg-4HF { background-color: #f97316 !important; color: #fff !important; }
+        .status-bg-P, .status-bg-D, .status-bg-S, .status-bg-Z { background-color: #cbd5e1 !important; }
+        
+    </style>
+</head>
+<body>
+    <? 
+    if (schedules && schedules.length > 0) { 
+        // -------------------------------------------------------------
+        // 1. FUSION DE TOUTES LES ÉQUIPES EN UNE SEULE LISTE
+        // -------------------------------------------------------------
+        var combinedMembers = [];
+        var combinedSchedule = {};
+        var teamNames = [];
+        var weekDates = schedules[0].weekDates;
+        var addedIds = {}; // Pour éviter les doublons
+
+        for (var i = 0; i < schedules.length; i++) {
+            var data = schedules[i];
+            
+            // Collecter les noms d'équipes pour le grand titre
+            if (data.teamName && data.teamName !== "Tous" && teamNames.indexOf(data.teamName) === -1) {
+                teamNames.push(data.teamName);
+            }
+            
+            // Fusionner le personnel
+            if (data.teamMembers) {
+                for (var j = 0; j < data.teamMembers.length; j++) {
+                    var member = data.teamMembers[j];
+                    if (!addedIds[member.id]) {
+                        combinedMembers.push(member);
+                        addedIds[member.id] = true;
+                    }
+                }
+            }
+            
+            // Fusionner les plannings
+            if (data.schedule) {
+                for (var personId in data.schedule) {
+                    combinedSchedule[personId] = data.schedule[personId];
+                }
+            }
+        }
+
+        // Titre dynamique
+        var displayTeamName = teamNames.length > 0 ? teamNames.join(' & ') : "Périmètre complet";
+
+        // -------------------------------------------------------------
+        // 2. TRI PAR POSTE DE TRAVAIL PUIS PAR NOM
+        // -------------------------------------------------------------
+        combinedMembers.sort(function(a, b) {
+            var posteA = (a.posteDeTravail || "Z_Non assigné").toUpperCase();
+            var posteB = (b.posteDeTravail || "Z_Non assigné").toUpperCase();
+            
+            if (posteA < posteB) return -1;
+            if (posteA > posteB) return 1;
+            
+            var nomA = (a.nom || "").toUpperCase();
+            var nomB = (b.nom || "").toUpperCase();
+            
+            if (nomA < nomB) return -1;
+            if (nomA > nomB) return 1;
+            
+            return 0;
+        });
+    ?>
+
+<div class="team-section">
+  <h1><?= t.planning ?> <?= displayTeamName ?></h1>
+  <h2><?= t.week ?> <?= formatDate(weekDates[0]) ?> <?= t.to ?> <?= formatDate(weekDates[6]) ?></h2>
+
+            <div class="table-rounded-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="col-name"><?= t.staff ?></th>
+                            <? for (var j = 0; j < weekDates.length; j++) { ?>
+                                <th class="col-day"><?= formatDate(weekDates[j]) ?></th>
+                            <? } ?>
+                        </tr>
+                    </thead>
+                    <tbody>
+    <? if (combinedMembers.length > 0) { ?>
+        <? var lastPoste = null; ?>
+        <? for (var j = 0; j < combinedMembers.length; j++) { ?>
+            <? 
+               var member = combinedMembers[j];
+               var currentPoste = member.posteDeTravail || "Non assigné"; 
+               
+               // Déterminer si c'est un changement de poste pour ajouter la bordure
+               var isNewPosteGroup = (lastPoste !== null && lastPoste !== currentPoste);
+               lastPoste = currentPoste;
+
+               var memberSchedule = combinedSchedule[member.id] || {};
+               var isInterim = member.role === 'Intérimaire';
+               
+               var trClass = isNewPosteGroup ? "poste-separator" : "";
+               var tdClass = "col-name" + (isInterim ? " cell-interim" : "");
+            ?>
+
+            <tr class="<?= trClass ?>">
+                <td class="<?= tdClass ?>">
+                    <span class="person-name"><?= member.nom ?> <?= member.prenom ?></span>
+                    <span class="meta-info">(<?= currentPoste ?> - <?= member.matricule || 'N/A' ?>)</span>
+                </td>
+                <? for (var k = 0; k < weekDates.length; k++) { ?>
+                    <? 
+                       var dateKey = weekDates[k]; 
+                       var status = memberSchedule[dateKey] || ''; 
+                    ?>
+                    <td class="status-cell status-bg-<?= status ?>"><?= sTr[status] || status ?></td>
+                <? } ?>
+            </tr>
+        <? } ?>
+    <? } else { ?>
+        <tr><td colspan="8" style="padding: 10px;"><?= t.nodata ?></td></tr>
+    <? } ?>
+                    </tbody>
+                    <tfoot>
+                        <tr style="background-color: #f3f4f6; font-weight: bold;">
+                            <td class="col-name" style="text-align: right; padding-right: 10px;"><?= t.total ?></td>
+                            <? var presentStatuses = ['M', 'A', 'N', 'J']; ?>
+                            <? for (var j = 0; j < weekDates.length; j++) { ?>
+                                <? var dateKey = weekDates[j]; ?>
+                                <? var dailyTotal = 0; ?>
+                                <? for (var k = 0; k < combinedMembers.length; k++) { ?>
+                                    <? var member = combinedMembers[k]; ?>
+                                    <? if (member.role !== 'Apprenti Atelier') { ?>
+                                        <? var status = (combinedSchedule[member.id] || {})[dateKey] || ''; ?>
+                                        <? if (presentStatuses.indexOf(status) !== -1) { dailyTotal++; } ?>
+                                    <? } ?>
+                                <? } ?>
+                                <td><? if (dailyTotal > 0) { ?><?= dailyTotal ?><? } ?></td>
+                            <? } ?>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+    <? } else { ?>
+  <p style="padding: 20px; font-family: sans-serif;"><?= t.empty ?></p>
+  <? } ?>
+</body>
+</html>
