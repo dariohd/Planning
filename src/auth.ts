@@ -26,14 +26,18 @@ const providers: Provider[] = [
 
       if (demoUsername && demoPassword && safeEqual(username, demoUsername) && safeEqual(password, demoPassword)) {
         const email = (process.env.DEMO_USER_EMAIL ?? `${username.toLowerCase()}@demo.planning.local`).toLowerCase();
-        const role = process.env.DEMO_USER_ROLE ?? "Lecteur";
-        const personnelId = process.env.DEMO_PERSONNEL_ID ?? null;
-        const user = await prisma.user.upsert({
-          where: { email },
-          create: { email, role, name: username, personnelId },
-          update: { role, name: username, personnelId },
-        });
-        return { id: user.id, email: user.email, name: user.name, role: user.role };
+        const role = process.env.DEMO_USER_ROLE?.trim() ?? "Lecteur";
+        try {
+          const user = await prisma.user.upsert({
+            where: { email },
+            create: { email, role, name: username },
+            update: { role, name: username },
+          });
+          return { id: user.id, email: user.email, name: user.name, role: user.role };
+        } catch (e) {
+          console.error("Demo login DB error:", e);
+          return null;
+        }
       }
 
       if (process.env.NODE_ENV !== "production" || process.env.ALLOW_DEV_LOGIN === "true") {
