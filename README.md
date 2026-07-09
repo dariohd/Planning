@@ -42,24 +42,61 @@ Ouvrir [http://localhost:3000](http://localhost:3000). En dev, utiliser **Connex
 
 ## Déploiement Vercel
 
-1. Créer un projet Vercel lié à ce dépôt
-2. Ajouter les variables d'environnement :
-   - `DATABASE_URL`
-   - `AUTH_SECRET`
-   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (production)
-3. Build command (recommandé) :
+Projet lié : [github.com/dariohd/Planning](https://github.com/dariohd/Planning)
 
-```bash
-prisma generate && prisma db push && next build
+### 1. Base PostgreSQL
+
+Dans Vercel : **Storage** → créer une base Postgres (Neon) ou lier une base existante.
+Vercel injecte automatiquement `DATABASE_URL` (ou `POSTGRES_URL` — dans ce cas, créer une variable `DATABASE_URL` qui pointe vers la même valeur).
+
+### 2. Variables d'environnement (Vercel → Settings → Environment Variables)
+
+| Variable | Obligatoire | Description |
+|----------|-------------|-------------|
+| `DATABASE_URL` | Oui | Connection string PostgreSQL (`?sslmode=require`) |
+| `AUTH_SECRET` | Oui | Secret aléatoire (`openssl rand -base64 32`) |
+| `AUTH_URL` | Oui | URL prod, ex. `https://planning-xxx.vercel.app` |
+| `GOOGLE_CLIENT_ID` | Oui (prod) | OAuth Google Cloud |
+| `GOOGLE_CLIENT_SECRET` | Oui (prod) | OAuth Google Cloud |
+| `SEED_SECRET` | Recommandé | Secret one-shot pour importer le personnel en prod |
+
+Ne pas activer `ALLOW_DEV_LOGIN` en production.
+
+### 3. Google OAuth
+
+Dans [Google Cloud Console](https://console.cloud.google.com/apis/credentials), ajouter l'URI de redirection :
+
+```
+https://VOTRE-DOMAINE.vercel.app/api/auth/callback/google
 ```
 
-Ou utiliser `prisma migrate deploy` si vous versionnez les migrations.
+### 4. Déployer
 
-4. Après le premier déploiement, exécuter le seed (localement pointé vers la DB prod, ou via script CI) :
+Chaque push sur `main` redéploie. Le script `vercel-build` crée le schéma Prisma automatiquement (`db push`).
+
+### 5. Importer le personnel (une fois)
+
+En local, avec la `DATABASE_URL` de prod :
 
 ```bash
 npm run db:seed
 ```
+
+Ou en prod via l'API (une fois `SEED_SECRET` configuré) :
+
+```bash
+curl -X POST https://VOTRE-DOMAINE.vercel.app/api/admin/seed -H "x-seed-secret: VOTRE_SECRET"
+```
+
+### 6. Premier utilisateur admin
+
+Après connexion Google, l'utilisateur est créé avec le rôle `Non Autorisé`. Mettre à jour en base :
+
+```sql
+UPDATE "User" SET role = 'Administrateur' WHERE email = 'votre@email.com';
+```
+
+Ou exécuter le seed qui crée `admin@local.dev` (utile seulement avec login dev).
 
 ## Fonctionnalités migrées
 
