@@ -3,9 +3,13 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import type { Provider } from "next-auth/providers";
 import { authConfig } from "@/auth.config";
-import { isDemoLoginConfigured, safeEqual } from "@/lib/demo-auth";
+import { envValue, isDemoLoginConfigured, safeEqual } from "@/lib/demo-auth";
 import { prisma } from "@/lib/db";
 import { nameFromEmail } from "@/lib/permissions";
+
+const authUrl = envValue("AUTH_URL");
+if (authUrl) process.env.AUTH_URL = authUrl;
+else delete process.env.AUTH_URL;
 
 const providers: Provider[] = [
   Credentials({
@@ -21,12 +25,12 @@ const providers: Provider[] = [
 
       if (!username || !password) return null;
 
-      const demoUsername = process.env.DEMO_USERNAME?.trim();
-      const demoPassword = process.env.DEMO_PASSWORD?.trim();
+      const demoUsername = envValue("DEMO_USERNAME");
+      const demoPassword = envValue("DEMO_PASSWORD");
 
       if (demoUsername && demoPassword && safeEqual(username, demoUsername) && safeEqual(password, demoPassword)) {
         const email = (process.env.DEMO_USER_EMAIL ?? `${username.toLowerCase()}@demo.planning.local`).toLowerCase();
-        const role = process.env.DEMO_USER_ROLE?.trim() ?? "Lecteur";
+        const role = envValue("DEMO_USER_ROLE") ?? "Lecteur";
         try {
           await prisma.user.upsert({
             where: { email },

@@ -1,5 +1,12 @@
 import { timingSafeEqual } from "crypto";
 
+/** Strip BOM / whitespace from env values (Vercel CLI can inject a UTF-8 BOM). */
+export function envValue(key: string): string | undefined {
+  const raw = process.env[key];
+  if (!raw) return undefined;
+  return raw.replace(/^\uFEFF/, "").trim();
+}
+
 export function safeEqual(a: string, b: string): boolean {
   const ba = Buffer.from(a);
   const bb = Buffer.from(b);
@@ -8,5 +15,5 @@ export function safeEqual(a: string, b: string): boolean {
 }
 
 export function isDemoLoginConfigured(): boolean {
-  return Boolean(process.env.DEMO_USERNAME && process.env.DEMO_PASSWORD);
+  return Boolean(envValue("DEMO_USERNAME") && envValue("DEMO_PASSWORD"));
 }
