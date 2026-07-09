@@ -1,3 +1,4 @@
+import { getFrenchPublicHolidays } from "./holidays";
 import { prisma } from "./db";
 import { calculateShiftForDate } from "./shifts";
 import type { PersonnelRecord } from "./types";
@@ -26,12 +27,17 @@ export async function populateInitialScheduleForPerson(
     },
   });
   const existingMap = new Map(existing.map((r) => [r.date, r.status]));
+  const holidays = new Set(getFrenchPublicHolidays(year));
 
   const toUpsert: { personnelId: string; date: string; status: string }[] = [];
   const cursor = new Date(start.getTime());
 
   while (cursor <= end) {
     const dateKey = cursor.toISOString().slice(0, 10);
+    if (holidays.has(dateKey)) {
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      continue;
+    }
     const existingStatus = existingMap.get(dateKey);
     if (!existingStatus || !PRESERVE_STATUSES.has(existingStatus)) {
       const shift = calculateShiftForDate(person, cursor);

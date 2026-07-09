@@ -5,7 +5,8 @@ import type { AppMode, InitialData } from "@/lib/types";
 
 export async function getInitialData(
   email: string,
-  mode: AppMode = "production"
+  mode: AppMode = "production",
+  includeArchived = false
 ): Promise<InitialData | { error: string }> {
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   const role = user?.role ?? "Non Autorisé";
@@ -17,7 +18,9 @@ export async function getInitialData(
   const rows = await prisma.personnel.findMany({ orderBy: [{ nom: "asc" }, { prenom: "asc" }] });
   const personnel = rows.map(toPersonnelRecord);
   const activePersonnel = personnel.filter((p) => p.statut !== "Archivé");
-  const modePersonnel = filterPersonnelByMode(activePersonnel, mode);
+  const archivedPersonnel = personnel.filter((p) => p.statut === "Archivé");
+  const sourcePersonnel = includeArchived ? archivedPersonnel : activePersonnel;
+  const modePersonnel = filterPersonnelByMode(sourcePersonnel, mode);
 
   let chefsEquipe: { name: string; role: string }[] = [];
   if (mode === "support") {

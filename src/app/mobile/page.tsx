@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { InitialData, WeeklySchedule } from "@/lib/types";
-import { STATUS_BG } from "@/lib/constants";
+import { ALL_STATUSES, STATUS_BG } from "@/lib/constants";
+import { canUserEdit } from "@/lib/client-permissions";
 import { getMondayOfWeek } from "@/lib/shifts";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
@@ -13,18 +14,16 @@ export default function MobileApp() {
   const [weekStart, setWeekStart] = useState(getMondayOfWeek());
   const [selection, setSelection] = useState("Tous");
   const [shiftFilter, setShiftFilter] = useState("Tous");
+  const [editing, setEditing] = useState<{ id: string; date: string; status: string } | null>(null);
+
+  const canEdit = data ? canUserEdit(data.currentUser.role) : false;
 
   const load = useCallback(async () => {
     const initRes = await fetch("/api/initial-data?mode=production");
     const init = await initRes.json();
     setData(init);
 
-    const params = new URLSearchParams({
-      selection,
-      weekStart,
-      mode: "production",
-      shiftFilter,
-    });
+    const params = new URLSearchParams({ selection, weekStart, mode: "production", shiftFilter });
     const weekRes = await fetch(`/api/team/week?${params}`);
     setWeekly(await weekRes.json());
   }, [selection, weekStart, shiftFilter]);
@@ -41,6 +40,18 @@ export default function MobileApp() {
     setWeekStart(d.toISOString().slice(0, 10));
   };
 
+  const cycleStatus = async (personnelId: string, date: string, current: string) => {
+    if (!canEdit) return;
+    const idx = ALL_STATUSES.indexOf(current as (typeof ALL_STATUSES)[number]);
+    const next = ALL_STATUSES[(idx + 1) % ALL_STATUSES.length];
+    await fetch("/api/presences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ personnelId, date, status: next }),
+    });
+    load();
+  };
+
   const presentCount = weekly?.teamMembers?.reduce((acc, m) => {
     for (const d of weekly.weekDates ?? []) {
       const s = weekly.schedule[m.id]?.[d];
@@ -54,77 +65,62 @@ export default function MobileApp() {
       <header className="glass-nav px-4 py-3 border-b border-slate-200 flex justify-between items-center">
         <div>
           <h1 className="font-black text-lg italic">{data?.settings.appName ?? "Planning"}</h1>
-          <p className="text-[10px] text-slate-500">{data?.currentUser.role}</p>
+          <p className="text-[10px] text-slate-500">
+            {data?.currentUser.role}{!canEdit && " · lecture seule"}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/desktop" className="text-xs font-bold px-3 py-2 rounded-xl bg-white border">
-            Bureau
-          </Link>
-          <button type="button" onClick={() => signOut()} className="text-xs text-slate-500 px-2">
-            Sortir
-          </button>
+          <Link href="/desktop" className="text-xs font-bold px-3 py-2 rounded-xl bg-white border">Bureau</Link>
+          <button type="button" onClick={() => signOut()} className="text-xs text-slate-500 px-2">Sortir</button>
         </div>
       </header>
 
       <div className="px-4 py-3 flex gap-2 overflow-x-auto items-center">
-        <select
-          value={selection}
-          onChange={(e) => setSelection(e.target.value)}
-          className="rounded-xl border px-3 py-2 text-xs font-bold bg-white flex-shrink-0"
-        >
+        <select value={selection} onChange={(e) => setSelection(e.target.value)} className="rounded-xl border px-3 py-2 text-xs font-bold bg-white flex-shrink-0">
           <option value="Tous">Tous</option>
           {data?.chefsEquipe.map((c) => (
-            <option key={c.name} value={`${c.name} (${c.role})`}>
-              {c.name}
-            </option>
+            <option key={c.name} value={`${c.name} (${c.role})`}>{c.name}</option>
           ))}
         </select>
-        <select
-          value={shiftFilter}
-          onChange={(e) => setShiftFilter(e.target.value)}
-          className="rounded-xl border px-2 py-2 text-xs font-bold bg-white"
-        >
-          {["Tous", "M", "A", "N", "J"].map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
+        <select value={shiftFilter} onChange={(e) => setShiftFilter(e.target.value)} className="rounded-xl border px-2 py-2 text-xs font-bold bg-white">
+          {["Tous", "M", "A", "N", "J"].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <button type="button" onClick={() => shiftWeek(-1)} className="px-3 rounded-xl bg-white border text-sm">
-          ←
-        </button>
-        <button type="button" onClick={() => shiftWeek(1)} className="px-3 rounded-xl bg-white border text-sm">
-          →
-        </button>
+        <button type="button" onClick={() => shiftWeek(-1)} className="px-3 rounded-xl bg-white border text-sm">←</button>
+        <button type="button" onClick={() => shiftWeek(1)} className="px-3 rounded-xl bg-white border text-sm">→</button>
       </div>
 
       {weekly?.weekDates?.[0] && (
         <p className="px-4 text-[10px] font-bold text-slate-500 mb-1">
           Sem. {weekly.weekDates[0]} — {weekly.weekDates[6]} · {presentCount ?? 0} présences
+          {canEdit && " · toucher pour modifier"}
         </p>
       )}
 
       <main className="flex-1 overflow-y-auto px-3 pb-6 space-y-3">
         {weekly?.teamMembers?.map((member) => (
-          <div
-            key={member.id}
-            className={`bg-white rounded-3xl p-4 shadow-sm ${member.role === "Intérimaire" ? "ring-1 ring-cyan-200" : ""}`}
-          >
-            <div className="font-bold text-sm mb-1">
-              {member.prenom} {member.nom}
-            </div>
-            <div className="text-[10px] text-slate-400 mb-2">
-              {member.posteDeTravail} · {member.matricule}
-            </div>
+          <div key={member.id} className={`bg-white rounded-3xl p-4 shadow-sm ${member.role === "Intérimaire" ? "ring-1 ring-cyan-200" : ""}`}>
+            <div className="font-bold text-sm mb-1">{member.prenom} {member.nom}</div>
+            <div className="text-[10px] text-slate-400 mb-2">{member.posteDeTravail} · {member.matricule}</div>
             <div className="grid grid-cols-7 gap-1">
               {weekly.weekDates.map((date) => {
                 const st = weekly.schedule[member.id]?.[date] || "";
                 const bg = STATUS_BG[st] ?? "bg-slate-50 text-slate-600";
+                const isEditing = editing?.id === member.id && editing.date === date;
                 return (
-                  <div key={date} className="text-center">
-                    <div className="text-[9px] text-slate-400 mb-1">{date.slice(8)}</div>
-                    <div className={`text-xs font-bold rounded-lg py-1 ${bg}`}>{st || "·"}</div>
-                  </div>
+                  <button
+                    key={date}
+                    type="button"
+                    disabled={!canEdit}
+                    className={`text-center rounded-lg py-1 ${bg} ${isEditing ? "ring-2 ring-[#00205b]" : ""} disabled:opacity-70`}
+                    onClick={() => {
+                      if (!canEdit) return;
+                      setEditing({ id: member.id, date, status: st });
+                      cycleStatus(member.id, date, st);
+                    }}
+                  >
+                    <div className="text-[9px] text-slate-400 mb-0.5">{date.slice(8)}</div>
+                    <div className="text-xs font-bold">{st || "·"}</div>
+                  </button>
                 );
               })}
             </div>

@@ -53,7 +53,20 @@ export async function setPresence(
   status: string,
   loc: string | null = null
 ): Promise<void> {
-  if (!status) {
+  await setPresenceFull(personnelId, dateStr, { status, location: loc });
+}
+
+export async function setPresenceFull(
+  personnelId: string,
+  dateStr: string,
+  data: {
+    status: string;
+    location?: string | null;
+    comment?: string | null;
+    hs?: string | null;
+  }
+): Promise<void> {
+  if (!data.status) {
     await prisma.presence.deleteMany({ where: { personnelId, date: dateStr } });
     return;
   }
@@ -63,12 +76,16 @@ export async function setPresence(
     create: {
       personnelId,
       date: dateStr,
-      status,
-      location: loc,
+      status: data.status,
+      location: data.location ?? null,
+      comment: data.comment ?? null,
+      hs: data.hs ?? null,
     },
     update: {
-      status,
-      location: loc,
+      status: data.status,
+      location: data.location ?? null,
+      comment: data.comment ?? null,
+      hs: data.hs ?? null,
     },
   });
 }

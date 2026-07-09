@@ -1,7 +1,7 @@
 import { calculateShiftForDate } from "./shifts";
 import type { PersonnelRecord } from "./types";
 import { fullName } from "./personnel";
-import type { PresenceMap } from "./types";
+import type { DayPresence, PresenceMap } from "./types";
 
 export function getTeamMembersOptimized(
   selection: string,
@@ -103,4 +103,51 @@ export function buildWeeklySchedule(
   }
 
   return { teamName, weekDates, schedule, teamMembers };
+}
+
+export function buildMonthlySchedule(
+  teamSelection: string,
+  year: number,
+  month: number,
+  allPersonnel: PersonnelRecord[],
+  presencesByPerson: Record<string, PresenceMap>,
+  shiftFilter: string | null = null
+) {
+  const referenceMonday = new Date(Date.UTC(year, month, 1, 12, 0, 0));
+  const teamMembers = getTeamMembersOptimized(
+    teamSelection,
+    referenceMonday,
+    allPersonnel,
+    presencesByPerson,
+    shiftFilter
+  );
+
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const monthDates = Array.from({ length: daysInMonth }, (_, i) => {
+    const d = new Date(Date.UTC(year, month, i + 1, 12, 0, 0));
+    return d.toISOString().slice(0, 10);
+  });
+
+  const schedule: Record<string, Record<string, string>> = {};
+  const details: Record<string, Record<string, DayPresence>> = {};
+  for (const member of teamMembers) {
+    schedule[member.id] = {};
+    details[member.id] = {};
+  }
+
+  for (const dateStr of monthDates) {
+    for (const person of teamMembers) {
+      const stored = presencesByPerson[person.id]?.[dateStr];
+      if (stored?.s) {
+        schedule[person.id][dateStr] = stored.s;
+        details[person.id][dateStr] = stored;
+      } else {
+        const theoretical = calculateShiftForDate(person, new Date(`${dateStr}T12:00:00Z`));
+        if (theoretical) schedule[person.id][dateStr] = theoretical;
+      }
+    }
+  }
+
+  const teamName = teamSelection.replace(" (REAP)", "").replace(" (RP)", "");
+  return { teamName, monthDates, schedule, details, teamMembers, year, month };
 }

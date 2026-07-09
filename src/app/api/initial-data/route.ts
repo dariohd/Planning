@@ -8,7 +8,8 @@ export async function GET(req: NextRequest) {
   if ("error" in authResult && authResult.error) return authResult.error;
 
   const mode = (req.nextUrl.searchParams.get("mode") ?? "production") as AppMode;
-  const data = await getInitialData(authResult.session!.user!.email!, mode);
+  const includeArchived = req.nextUrl.searchParams.get("archived") === "true";
+  const data = await getInitialData(authResult.session!.user!.email!, mode, includeArchived);
   if ("error" in data) {
     return NextResponse.json(data, { status: 403 });
   }
