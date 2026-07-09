@@ -13,6 +13,33 @@ export const SUPPORT_ROLES = [
 
 export const PRESENT_STATUSES = ["M", "A", "N", "J"] as const;
 
+export const ALL_STATUSES = [
+  "",
+  "M",
+  "A",
+  "N",
+  "J",
+  "CP",
+  "4HCP",
+  "JRTT",
+  "Abs",
+  "RF",
+  "Ma",
+  "LMa",
+  "F",
+  "4HF",
+  "P",
+  "Z",
+  "S",
+  "D",
+  "Ecole",
+  "CET",
+  "Mi",
+  "EM",
+  "SC",
+  "SL",
+] as const;
+
 export const STATUS_LABELS: Record<string, string> = {
   J: "J",
   M: "M",

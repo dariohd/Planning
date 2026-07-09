@@ -1,19 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppMode, InitialData, PersonnelRecord, WeeklySchedule } from "@/lib/types";
+import { ALL_STATUSES } from "@/lib/constants";
 import { getMondayOfWeek } from "@/lib/shifts";
 import { fullName } from "@/lib/personnel";
 import { StatusCell } from "@/components/shared/StatusCell";
+import { StatusPicker } from "@/components/shared/StatusPicker";
+import { IndicatorsView } from "@/components/desktop/IndicatorsView";
+import { CapaView } from "@/components/desktop/CapaView";
+import { t, type Lang } from "@/lib/i18n";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 
-const STATUSES = ["", "M", "A", "N", "J", "CP", "Abs", "JRTT", "F", "Ma"];
+type View = "equipe" | "individuelle" | "indicateurs" | "capa";
+
+type PickerState = { personnelId: string; date: string; status: string } | null;
 
 export default function DesktopApp() {
   const { data: session } = useSession();
+  const [lang, setLang] = useState<Lang>("fr");
   const [mode, setMode] = useState<AppMode>("production");
-  const [view, setView] = useState<"equipe" | "individuelle">("equipe");
+  const [view, setView] = useState<View>("equipe");
   const [data, setData] = useState<InitialData | null>(null);
   const [weekStart, setWeekStart] = useState(getMondayOfWeek());
   const [selection, setSelection] = useState("Tous");
@@ -27,6 +35,14 @@ export default function DesktopApp() {
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [picker, setPicker] = useState<PickerState>(null);
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
+  const [rangeStatus, setRangeStatus] = useState("CP");
+  const [adminMsg, setAdminMsg] = useState<string | null>(null);
+  const lastModifiedRef = useRef<string>("0");
+
+  const isAdmin = data?.currentUser.role === "Administrateur";
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
@@ -38,26 +54,20 @@ export default function DesktopApp() {
       setData(null);
     } else {
       setData(json);
+      lastModifiedRef.current = String(json.lastModified ?? "0");
     }
     setLoading(false);
   }, [mode]);
 
   const loadWeekly = useCallback(async () => {
-    const params = new URLSearchParams({
-      selection,
-      weekStart,
-      mode,
-      shiftFilter,
-    });
+    const params = new URLSearchParams({ selection, weekStart, mode, shiftFilter });
     const res = await fetch(`/api/team/week?${params}`);
-    const json = await res.json();
-    setWeekly(json);
+    setWeekly(await res.json());
   }, [selection, weekStart, mode, shiftFilter]);
 
   const loadPersonYear = useCallback(async (personId: string, year: number) => {
     const res = await fetch(`/api/presences?personnelId=${personId}&year=${year}`);
-    const json = await res.json();
-    setYearPresences(json);
+    setYearPresences(await res.json());
   }, []);
 
   useEffect(() => {
@@ -65,14 +75,29 @@ export default function DesktopApp() {
   }, [loadInitial]);
 
   useEffect(() => {
-    if (view === "equipe") loadWeekly();
+    if (view === "equipe" || view === "capa") loadWeekly();
   }, [view, loadWeekly]);
 
   useEffect(() => {
-    if (selectedPerson) {
-      loadPersonYear(selectedPerson.id, calendarMonth.year);
-    }
+    if (selectedPerson) loadPersonYear(selectedPerson.id, calendarMonth.year);
   }, [selectedPerson, calendarMonth.year, loadPersonYear]);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const res = await fetch(
+        `/api/updates?since=${lastModifiedRef.current}&mode=${mode}`
+      );
+      const json = await res.json();
+      if (json.hasChanges && json.newData) {
+        setData(json.newData);
+        lastModifiedRef.current = String(json.lastModified);
+        if (view === "equipe") loadWeekly();
+      } else if (json.lastModified) {
+        lastModifiedRef.current = String(json.lastModified);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [mode, view, loadWeekly]);
 
   const teamOptions = useMemo(() => {
     if (!data) return ["Tous"];
@@ -95,6 +120,54 @@ export default function DesktopApp() {
     if (selectedPerson?.id === personnelId) loadPersonYear(personnelId, calendarMonth.year);
   };
 
+  const applyRange = async () => {
+    if (!selectedPerson || !rangeStart || !rangeEnd) return;
+    await fetch("/api/presences/range", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        personnelId: selectedPerson.id,
+        startDate: rangeStart,
+        endDate: rangeEnd,
+        status: rangeStatus,
+      }),
+    });
+    loadPersonYear(selectedPerson.id, calendarMonth.year);
+    setAdminMsg("Plage appliquée");
+    setTimeout(() => setAdminMsg(null), 3000);
+  };
+
+  const archivePerson = async () => {
+    if (!selectedPerson || !isAdmin) return;
+    if (!confirm(`Archiver ${fullName(selectedPerson)} ?`)) return;
+    await fetch(`/api/personnel/${selectedPerson.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "archive" }),
+    });
+    setSelectedPerson(null);
+    loadInitial();
+  };
+
+  const generateYear = async () => {
+    const year = calendarMonth.year;
+    if (!confirm(`Générer les plannings ${year} pour tous les collaborateurs ?`)) return;
+    setAdminMsg("Génération en cours...");
+    const res = await fetch("/api/schedule/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ year }),
+    });
+    const json = await res.json();
+    setAdminMsg(res.ok ? `Année ${year} générée (${json.created ?? 0} entrées)` : json.error);
+    setTimeout(() => setAdminMsg(null), 5000);
+  };
+
+  const openPrint = () => {
+    const params = new URLSearchParams({ selection, weekStart, mode, lang });
+    window.open(`/api/print/week?${params}`, "_blank");
+  };
+
   const daysInMonth = useMemo(() => {
     const { year, month } = calendarMonth;
     const first = new Date(Date.UTC(year, month, 1));
@@ -102,6 +175,8 @@ export default function DesktopApp() {
     const startPad = (first.getUTCDay() + 6) % 7;
     return { count, startPad };
   }, [calendarMonth]);
+
+  const indicatorDate = weekly?.weekDates?.[0] ?? weekStart;
 
   if (loading) {
     return (
@@ -117,7 +192,7 @@ export default function DesktopApp() {
         <div className="glass rounded-3xl p-8 max-w-lg text-center">
           <p className="text-red-600 font-semibold mb-4">{error}</p>
           <button type="button" onClick={() => signOut()} className="text-sm underline">
-            Se déconnecter
+            {t(lang, "logout")}
           </button>
         </div>
       </div>
@@ -126,6 +201,15 @@ export default function DesktopApp() {
 
   return (
     <div className="min-h-screen">
+      <StatusPicker
+        open={!!picker}
+        current={picker?.status ?? ""}
+        onSelect={(s) => {
+          if (picker) updatePresence(picker.personnelId, picker.date, s);
+        }}
+        onClose={() => setPicker(null)}
+      />
+
       <header className="sticky top-0 z-20 glass border-b border-white/60 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black italic uppercase tracking-tight text-[#00205b]">
@@ -136,38 +220,49 @@ export default function DesktopApp() {
           </p>
         </div>
 
-        <nav className="flex gap-2">
-          <button
-            type="button"
-            className="nav-link px-4 py-2 rounded-xl text-sm font-bold"
-            aria-selected={view === "equipe"}
-            onClick={() => setView("equipe")}
-          >
-            Équipe
-          </button>
-          <button
-            type="button"
-            className="nav-link px-4 py-2 rounded-xl text-sm font-bold"
-            aria-selected={view === "individuelle"}
-            onClick={() => setView("individuelle")}
-          >
-            Individuel
-          </button>
+        <nav className="flex flex-wrap gap-2 items-center">
+          {(["equipe", "individuelle", "indicateurs", "capa"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              className="nav-link px-4 py-2 rounded-xl text-sm font-bold"
+              aria-selected={view === v}
+              onClick={() => setView(v)}
+            >
+              {t(lang, v === "equipe" ? "team" : v === "individuelle" ? "individual" : v === "indicateurs" ? "indicators" : "capa")}
+            </button>
+          ))}
           <Link href="/mobile" className="px-4 py-2 rounded-xl text-sm font-bold bg-[#00b5e2] text-white">
-            Mobile
+            {t(lang, "mobile")}
           </Link>
+          <select
+            value={lang}
+            onChange={(e) => setLang(e.target.value as Lang)}
+            className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold"
+            aria-label="Langue"
+          >
+            <option value="fr">FR</option>
+            <option value="en">EN</option>
+            <option value="pt">PT</option>
+          </select>
           <button
             type="button"
             onClick={() => setMode(mode === "production" ? "support" : "production")}
             className="px-4 py-2 rounded-xl text-sm font-bold border border-[#00205b] text-[#00205b]"
           >
-            {mode === "production" ? "Production" : "Support"}
+            {t(lang, mode)}
           </button>
           <button type="button" onClick={() => signOut()} className="px-3 py-2 text-sm text-slate-500">
-            Déconnexion
+            {t(lang, "logout")}
           </button>
         </nav>
       </header>
+
+      {adminMsg && (
+        <div className="mx-6 mt-4 rounded-xl bg-[#00205b] text-white text-sm font-bold px-4 py-2 text-center">
+          {adminMsg}
+        </div>
+      )}
 
       <main className="p-6 max-w-[1600px] mx-auto">
         {view === "equipe" && (
@@ -195,12 +290,19 @@ export default function DesktopApp() {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={openPrint}
+                className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-[#00205b] text-[#00205b]"
+              >
+                {t(lang, "print")}
+              </button>
               <div className="flex items-center gap-2 ml-auto">
                 <button type="button" onClick={() => shiftWeek(-1)} className="px-3 py-2 rounded-lg bg-white border">
                   ←
                 </button>
                 <span className="text-sm font-bold">
-                  Semaine du {weekly?.weekDates?.[0]} au {weekly?.weekDates?.[6]}
+                  {t(lang, "week_of")} {weekly?.weekDates?.[0]} {t(lang, "to")} {weekly?.weekDates?.[6]}
                 </span>
                 <button type="button" onClick={() => shiftWeek(1)} className="px-3 py-2 rounded-lg bg-white border">
                   →
@@ -222,10 +324,7 @@ export default function DesktopApp() {
                 </thead>
                 <tbody>
                   {weekly?.teamMembers?.map((member) => (
-                    <tr
-                      key={member.id}
-                      className={member.role === "Intérimaire" ? "bg-cyan-50" : ""}
-                    >
+                    <tr key={member.id} className={member.role === "Intérimaire" ? "bg-cyan-50" : ""}>
                       <td className="border border-slate-300 p-2">
                         <div className="font-bold">
                           {member.nom} {member.prenom}
@@ -238,12 +337,13 @@ export default function DesktopApp() {
                         <StatusCell
                           key={date}
                           status={weekly.schedule[member.id]?.[date] ?? ""}
-                          onClick={() => {
-                            const current = weekly.schedule[member.id]?.[date] ?? "";
-                            const idx = STATUSES.indexOf(current);
-                            const next = STATUSES[(idx + 1) % STATUSES.length];
-                            updatePresence(member.id, date, next);
-                          }}
+                          onClick={() =>
+                            setPicker({
+                              personnelId: member.id,
+                              date,
+                              status: weekly.schedule[member.id]?.[date] ?? "",
+                            })
+                          }
                         />
                       ))}
                     </tr>
@@ -258,12 +358,11 @@ export default function DesktopApp() {
           <section className="grid lg:grid-cols-12 gap-6">
             <aside className="lg:col-span-4 glass rounded-3xl p-4 max-h-[80vh] overflow-y-auto">
               <input
-                placeholder="Rechercher..."
+                placeholder={t(lang, "search")}
                 className="w-full mb-3 rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 onChange={(e) => {
                   const q = e.target.value.toLowerCase();
-                  const el = document.querySelectorAll("[data-person-item]");
-                  el.forEach((node) => {
+                  document.querySelectorAll("[data-person-item]").forEach((node) => {
                     const text = (node as HTMLElement).dataset.search ?? "";
                     (node as HTMLElement).style.display = text.includes(q) ? "" : "none";
                   });
@@ -286,7 +385,9 @@ export default function DesktopApp() {
                       <div className="font-bold text-sm">
                         {p.nom} {p.prenom}
                       </div>
-                      <div className="text-xs text-slate-500">{p.role} — {p.section}</div>
+                      <div className="text-xs text-slate-500">
+                        {p.role} — {p.section}
+                      </div>
                     </button>
                   </li>
                 ))}
@@ -295,14 +396,32 @@ export default function DesktopApp() {
 
             <div className="lg:col-span-8 glass rounded-3xl p-6">
               {!selectedPerson ? (
-                <p className="text-center text-slate-500 py-20">Sélectionnez un collaborateur</p>
+                <p className="text-center text-slate-500 py-20">{t(lang, "select_person")}</p>
               ) : (
                 <>
-                  <div className="flex justify-between items-center mb-6">
+                  <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
                     <h2 className="text-2xl font-black uppercase italic text-[#00205b]">
                       {fullName(selectedPerson)}
                     </h2>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {isAdmin && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={generateYear}
+                            className="px-3 py-1 rounded-lg border text-xs font-bold"
+                          >
+                            {t(lang, "generate_year")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={archivePerson}
+                            className="px-3 py-1 rounded-lg border border-red-300 text-red-700 text-xs font-bold"
+                          >
+                            Archiver
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
                         className="px-3 py-1 rounded-lg border"
@@ -333,6 +452,43 @@ export default function DesktopApp() {
                     </div>
                   </div>
 
+                  <div className="mb-6 p-4 rounded-2xl bg-white/60 border border-slate-200">
+                    <p className="text-xs font-bold text-slate-500 mb-2">Appliquer une plage</p>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <input
+                        type="date"
+                        value={rangeStart}
+                        onChange={(e) => setRangeStart(e.target.value)}
+                        className="rounded-lg border px-2 py-1 text-sm"
+                      />
+                      <span className="text-slate-400">→</span>
+                      <input
+                        type="date"
+                        value={rangeEnd}
+                        onChange={(e) => setRangeEnd(e.target.value)}
+                        className="rounded-lg border px-2 py-1 text-sm"
+                      />
+                      <select
+                        value={rangeStatus}
+                        onChange={(e) => setRangeStatus(e.target.value)}
+                        className="rounded-lg border px-2 py-1 text-sm"
+                      >
+                        {ALL_STATUSES.filter(Boolean).map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={applyRange}
+                        className="px-3 py-1 rounded-lg bg-[#00205b] text-white text-sm font-bold"
+                      >
+                        Appliquer
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-500 mb-2">
                     {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => (
                       <div key={d}>{d}</div>
@@ -351,16 +507,18 @@ export default function DesktopApp() {
                         <button
                           key={day}
                           type="button"
-                          className={`aspect-square rounded-full flex items-center justify-center text-xs font-bold hover:bg-slate-100 ${bg}`}
-                          onClick={() => {
-                            const idx = STATUSES.indexOf(status);
-                            const next = STATUSES[(idx + 1) % STATUSES.length];
-                            updatePresence(selectedPerson.id, dateKey, next);
-                          }}
+                          className={`relative aspect-square rounded-full flex flex-col items-center justify-center text-xs font-bold hover:bg-slate-100 ${bg}`}
+                          onClick={() =>
+                            setPicker({
+                              personnelId: selectedPerson.id,
+                              date: dateKey,
+                              status,
+                            })
+                          }
                         >
                           <span>{day}</span>
                           {status && (
-                            <span className="absolute text-[9px] mt-5 text-[#00205b]">{status}</span>
+                            <span className="text-[9px] text-[#00205b]">{status}</span>
                           )}
                         </button>
                       );
@@ -371,6 +529,12 @@ export default function DesktopApp() {
             </div>
           </section>
         )}
+
+        {view === "indicateurs" && (
+          <IndicatorsView mode={mode} selection={selection} date={indicatorDate} />
+        )}
+
+        {view === "capa" && <CapaView mode={mode} weekStart={weekStart} />}
       </main>
     </div>
   );
