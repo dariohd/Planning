@@ -21,8 +21,8 @@ const providers: Provider[] = [
 
       if (!username || !password) return null;
 
-      const demoUsername = process.env.DEMO_USERNAME;
-      const demoPassword = process.env.DEMO_PASSWORD;
+      const demoUsername = process.env.DEMO_USERNAME?.trim();
+      const demoPassword = process.env.DEMO_PASSWORD?.trim();
 
       if (demoUsername && demoPassword && safeEqual(username, demoUsername) && safeEqual(password, demoPassword)) {
         const email = (process.env.DEMO_USER_EMAIL ?? `${username.toLowerCase()}@demo.planning.local`).toLowerCase();
