@@ -14,6 +14,11 @@ export function getTeamMembersOptimized(
 
   if (selection === "Tous") {
     members = [...allPersonnel];
+  } else if (selection === "__UNASSIGNED_3x8__") {
+    members = allPersonnel.filter((p) => {
+      const tq = (p.typeQuart ?? "").replace(/\*/g, "x").toLowerCase();
+      return tq.includes("3x8") && !p.chefEquipeAssocie;
+    });
   } else if (selection.endsWith(" (REAP)")) {
     const name = selection.replace(" (REAP)", "");
     const manager = allPersonnel.find((p) => fullName(p) === name && p.role === "REAP");
@@ -109,9 +114,11 @@ export function buildWeeklySchedule(
   );
 
   const schedule: Record<string, Record<string, string>> = {};
+  const details: Record<string, Record<string, DayPresence>> = {};
   const memberIds = teamMembers.map((m) => m.id);
   memberIds.forEach((id) => {
     schedule[id] = {};
+    details[id] = {};
   });
 
   const weekDates = Array.from({ length: 7 }, (_, i) => {
@@ -122,9 +129,10 @@ export function buildWeeklySchedule(
 
   for (const dateStr of weekDates) {
     for (const person of teamMembers) {
-      const stored = presencesByPerson[person.id]?.[dateStr]?.s;
-      if (stored) {
-        schedule[person.id][dateStr] = stored;
+      const stored = presencesByPerson[person.id]?.[dateStr];
+      if (stored?.s) {
+        schedule[person.id][dateStr] = stored.s;
+        details[person.id][dateStr] = stored;
       } else {
         const theoretical = calculateShiftForDate(person, new Date(`${dateStr}T12:00:00Z`));
         if (theoretical) schedule[person.id][dateStr] = theoretical;
@@ -132,7 +140,7 @@ export function buildWeeklySchedule(
     }
   }
 
-  return { teamName, weekDates, schedule, teamMembers };
+  return { teamName, weekDates, schedule, details, teamMembers };
 }
 
 export function buildMonthlySchedule(

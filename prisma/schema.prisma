@@ -68,3 +68,16 @@ model AppConfig {
   id    String @id @default("default")
   data  Json   @default("{}")
 }
+
+model CapaReel {
+  id        String   @id @default(cuid())
+  year      Int
+  week      Int
+  poste     String
+  value     Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([year, week, poste])
+  @@index([year])
+}

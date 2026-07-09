@@ -22,6 +22,10 @@ function emptyStats(): PeriodStats {
     Abs: [],
     F: [],
     RF: [],
+    P: [],
+    Z: [],
+    S: [],
+    Mi: [],
   };
 }
 
@@ -66,7 +70,6 @@ export async function getIndicatorsData(
 
   const y = referenceDate.getUTCFullYear();
   const m = referenceDate.getUTCMonth();
-  const d = referenceDate.getUTCDate();
   const dateKey = selectedDateStr;
 
   const dayOfWeek = referenceDate.getUTCDay();
@@ -122,6 +125,22 @@ export async function getIndicatorsData(
       compagnons: teamMembers.filter((p) => group1Roles.includes(p.role)).length,
       interimaires: teamMembers.filter((p) => group2Roles.includes(p.role)).length,
       total: teamMembers.length,
+    },
+    horsProd: {
+      daily:
+        (compagnons.daily.P?.length ?? 0) +
+        (compagnons.daily.Z?.length ?? 0) +
+        (compagnons.daily.S?.length ?? 0) +
+        (interimaires.daily.P?.length ?? 0) +
+        (interimaires.daily.Z?.length ?? 0) +
+        (interimaires.daily.S?.length ?? 0),
+      weekly:
+        (compagnons.weekly.P?.length ?? 0) +
+        (compagnons.weekly.Z?.length ?? 0) +
+        (compagnons.weekly.S?.length ?? 0) +
+        (interimaires.weekly.P?.length ?? 0) +
+        (interimaires.weekly.Z?.length ?? 0) +
+        (interimaires.weekly.S?.length ?? 0),
     },
   };
 }

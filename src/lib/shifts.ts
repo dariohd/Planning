@@ -19,11 +19,12 @@ export function calculateShiftForDate(
   person: Pick<PersonnelRecord, "typeQuart" | "quartDefaut">,
   targetDate: Date
 ): string | null {
-  if (!person.typeQuart) return null;
+  const typeQuart = person.typeQuart?.replace(/\*/g, "x") ?? "";
+  if (!typeQuart) return null;
 
-  if (person.typeQuart === "Journée") return "J";
+  if (typeQuart === "Journée") return "J";
 
-  if (person.typeQuart === "9*10") {
+  if (typeQuart === "9x10" || typeQuart === "9*10") {
     const cycle = ["SC", "SL"];
     const shiftIndex = cycle.indexOf(person.quartDefaut ?? "");
     if (shiftIndex === -1) return null;
@@ -32,12 +33,12 @@ export function calculateShiftForDate(
     return cycle[(shiftIndex + weeksPassed) % cycle.length];
   }
 
-  if (person.typeQuart === "2*8" || person.typeQuart === "3*8") {
+  if (typeQuart === "2x8" || typeQuart === "3x8" || typeQuart === "9x10 Portugal" || typeQuart === "Nuit Portugal") {
     let cycle: string[] = [];
-    if (person.typeQuart === "3*8") cycle = ["M", "N", "A"];
-    else if (person.typeQuart === "2*8") cycle = ["M", "A"];
-    else if (person.typeQuart === "9*10 Portugal") cycle = ["M", "M", "M", "A", "A", "A"];
-    else if (person.typeQuart === "Nuit Portugal") cycle = ["N"];
+    if (typeQuart === "3x8") cycle = ["M", "N", "A"];
+    else if (typeQuart === "2x8") cycle = ["M", "A"];
+    else if (typeQuart === "9x10 Portugal") cycle = ["M", "M", "M", "A", "A", "A"];
+    else if (typeQuart === "Nuit Portugal") cycle = ["N"];
 
     const shiftIndex = cycle.indexOf(person.quartDefaut ?? "");
     if (shiftIndex === -1) return null;
@@ -57,6 +58,27 @@ export function getWeekDates(mondayIso: string): string[] {
     d.setUTCDate(referenceMonday.getUTCDate() + i);
     return d.toISOString().slice(0, 10);
   });
+}
+
+export function getDominantShiftForWeek(
+  schedule: Record<string, string>,
+  weekDates: string[],
+  fallback = "M"
+): string {
+  const counts: Record<string, number> = { M: 0, A: 0, N: 0, J: 0 };
+  for (const d of weekDates) {
+    const s = schedule[d];
+    if (s && counts[s] !== undefined) counts[s]++;
+  }
+  let best = fallback;
+  let max = -1;
+  for (const [k, v] of Object.entries(counts)) {
+    if (v > max) {
+      max = v;
+      best = k;
+    }
+  }
+  return best;
 }
 
 export function getMondayOfWeek(date = new Date()): string {

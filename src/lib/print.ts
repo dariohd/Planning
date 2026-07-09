@@ -1,6 +1,6 @@
 import { STATUS_LABELS } from "./constants";
 import { fullName } from "./personnel";
-import type { PersonnelRecord, WeeklySchedule } from "./types";
+import type { WeeklySchedule } from "./types";
 
 export function buildPrintableHtml(
   schedules: WeeklySchedule[],

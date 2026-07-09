@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
   const year = Number(req.nextUrl.searchParams.get("year") ?? new Date().getFullYear());
   const weekStart = req.nextUrl.searchParams.get("weekStart") ?? undefined;
 
-  const data = await getCapaDashboardData(mode, year, weekStart);
+  const annual = req.nextUrl.searchParams.get("annual") === "true";
+  const windowWeeks = req.nextUrl.searchParams.get("window") ? Number(req.nextUrl.searchParams.get("window")) : undefined;
+  const data = await getCapaDashboardData(mode, year, weekStart, annual, windowWeeks);
   return NextResponse.json(data);
 }

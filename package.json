@@ -12,6 +12,10 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx scripts/seed.ts",
+    "setup:local": "tsx scripts/setup-local.ts",
+    "import:presences": "tsx scripts/import-presences.ts",
+    "post-migrate": "tsx scripts/post-migrate.ts",
+    "generate:year": "tsx scripts/generate-year.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

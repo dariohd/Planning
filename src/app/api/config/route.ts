@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
-import { prisma } from "@/lib/db";
+import { getAppConfig, saveAppConfig } from "@/lib/app-config";
 
 export async function GET() {
   const authResult = await requireSession();
   if ("error" in authResult && authResult.error) return authResult.error;
 
-  const config = await prisma.appConfig.findUnique({ where: { id: "default" } });
-  const data = (config?.data as Record<string, unknown>) ?? {};
-
-  return NextResponse.json({
-    appName: data.appName ?? "Planning Présence",
-    manualTargets: data.manualTargets ?? {},
-    missions: data.missions ?? ["Mi"],
-    holidayCountry: data.holidayCountry ?? "FR",
-  });
+  const config = await getAppConfig();
+  return NextResponse.json(config);
 }
 
 export async function PATCH(req: NextRequest) {
@@ -26,21 +19,6 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json();
-  const existing = await prisma.appConfig.findUnique({ where: { id: "default" } });
-  const current = (existing?.data as Record<string, unknown>) ?? {};
-
-  const merged = {
-    ...current,
-    ...(body.appName !== undefined ? { appName: body.appName } : {}),
-    ...(body.manualTargets !== undefined ? { manualTargets: body.manualTargets } : {}),
-    ...(body.holidayCountry !== undefined ? { holidayCountry: body.holidayCountry } : {}),
-  };
-
-  await prisma.appConfig.upsert({
-    where: { id: "default" },
-    create: { id: "default", data: merged },
-    update: { data: merged },
-  });
-
+  const merged = await saveAppConfig(body);
   return NextResponse.json({ success: true, ...merged });
 }

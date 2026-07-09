@@ -9,6 +9,7 @@ type Props = {
   date: string;
   current: { status: string; comment?: string; hs?: string; location?: string };
   canEdit: boolean;
+  missions?: string[];
   onSave: (data: {
     status: string;
     comment?: string;
@@ -18,7 +19,7 @@ type Props = {
   onClose: () => void;
 };
 
-export function PresenceEditor({ open, date, current, canEdit, onSave, onClose }: Props) {
+export function PresenceEditor({ open, date, current, canEdit, missions = ["Mi"], onSave, onClose }: Props) {
   const [status, setStatus] = useState(current.status);
   const [comment, setComment] = useState(current.comment ?? "");
   const [hs, setHs] = useState(current.hs ?? "");
@@ -57,12 +58,25 @@ export function PresenceEditor({ open, date, current, canEdit, onSave, onClose }
         {(status === "Mi" || location) && (
           <label className="block mb-3">
             <span className="text-xs font-bold text-slate-500">Lieu mission</span>
+            <div className="flex flex-wrap gap-1 mt-1 mb-2">
+              {missions.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => setLocation(m)}
+                  className={`px-2 py-1 rounded-lg text-xs font-bold border ${location === m ? "bg-violet-200 border-violet-400" : "bg-white"}`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
             <input
               value={location}
               disabled={!canEdit}
               onChange={(e) => setLocation(e.target.value)}
-              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              placeholder="Ex: DRA718"
+              className="w-full rounded-xl border px-3 py-2 text-sm"
+              placeholder="Lieu personnalisé"
             />
           </label>
         )}

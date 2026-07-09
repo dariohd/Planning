@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import path from "path";
 import { prisma } from "./db";
+import { DEFAULT_CONFIG } from "./app-config";
 
 function parseCsvLine(line: string): string[] {
   const result: string[] = [];
@@ -30,7 +31,6 @@ export async function runSeed(): Promise<{ personnelCount: number }> {
 
   const idx = (name: string) => header.findIndex((h) => h === name);
 
-  await prisma.presence.deleteMany();
   await prisma.personnel.deleteMany();
 
   for (let i = 1; i < lines.length; i++) {
@@ -84,8 +84,8 @@ export async function runSeed(): Promise<{ personnelCount: number }> {
 
   await prisma.appConfig.upsert({
     where: { id: "default" },
-    create: { id: "default", data: { appName: "Planning Présence" } },
-    update: {},
+    create: { id: "default", data: DEFAULT_CONFIG },
+    update: { data: DEFAULT_CONFIG },
   });
 
   await prisma.appMeta.upsert({

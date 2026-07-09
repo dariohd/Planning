@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
   const mode = (req.nextUrl.searchParams.get("mode") ?? "production") as AppMode;
   const lang = (req.nextUrl.searchParams.get("lang") ?? "fr") as "fr" | "en" | "pt";
 
+  const shiftFilter = req.nextUrl.searchParams.get("shiftFilter") ?? "Tous";
+
   if (!weekStart) {
     return NextResponse.json({ error: "weekStart requis" }, { status: 400 });
   }
@@ -35,7 +37,7 @@ export async function GET(req: NextRequest) {
     endDate.toISOString().slice(0, 10)
   );
 
-  const weekly = buildWeeklySchedule(selection, weekStart, allPersonnel, presencesByPerson);
+  const weekly = buildWeeklySchedule(selection, weekStart, allPersonnel, presencesByPerson, shiftFilter);
   const html = buildPrintableHtml(schedulesFromWeekly(weekly, selection), lang);
 
   return new NextResponse(html, {

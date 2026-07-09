@@ -25,6 +25,31 @@ const patchSchema = z.object({
   role: z.string(),
 });
 
+const postSchema = z.object({
+  email: z.string().email(),
+  role: z.string().default("Lecteur"),
+  name: z.string().optional(),
+});
+
+export async function POST(req: NextRequest) {
+  const authResult = await requireSession();
+  if ("error" in authResult && authResult.error) return authResult.error;
+
+  if (authResult.session!.user!.role !== "Administrateur") {
+    return NextResponse.json({ error: "Administrateur requis." }, { status: 403 });
+  }
+
+  const body = postSchema.parse(await req.json());
+  const email = body.email.toLowerCase();
+  const created = await prisma.user.upsert({
+    where: { email },
+    create: { email, role: body.role, name: body.name ?? email.split("@")[0] },
+    update: { role: body.role, ...(body.name ? { name: body.name } : {}) },
+  });
+  await touchLastModified();
+  return NextResponse.json(created, { status: 201 });
+}
+
 export async function PATCH(req: NextRequest) {
   const authResult = await requireSession();
   if ("error" in authResult && authResult.error) return authResult.error;

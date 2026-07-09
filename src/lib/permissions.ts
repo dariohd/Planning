@@ -22,6 +22,12 @@ export function nameFromEmail(email: string): string {
     .join(" ");
 }
 
+const TEAM_MEMBER_ROLES = ["Compagnon", "Intérimaire", "Apprenti Atelier", "Pilote"];
+
+function canReapEditTarget(userRole: string, targetRole: string): boolean {
+  return userRole === "REAP" && TEAM_MEMBER_ROLES.includes(targetRole);
+}
+
 export async function ensureModificationAllowed(
   currentUserEmail: string,
   targetPersonnelId: string,
@@ -63,9 +69,7 @@ export async function ensureModificationAllowed(
   if (!currentUserAsManager) {
     const peers = PEER_PERMISSIONS[userRole];
     if (peers?.includes(personToModify.role)) return;
-    if (userRole === "REAP" && ["Compagnon", "Intérimaire", "Apprenti Atelier", "Pilote"].includes(personToModify.role)) {
-      return;
-    }
+    if (canReapEditTarget(userRole, personToModify.role)) return;
   } else {
     if (
       personToModify.responsableHierarchique === currentUserAsManager.id ||
@@ -76,7 +80,10 @@ export async function ensureModificationAllowed(
     if (currentUserAsManager.role === "Pilote" && personToModify.section === currentUserAsManager.section) {
       return;
     }
+    if (canReapEditTarget(userRole, personToModify.role)) return;
   }
+
+  if (canReapEditTarget(userRole, personToModify.role)) return;
 
   throw new Error(
     `Accès refusé. Un "${userRole}" ne peut pas modifier le profil de "${personToModify.role}".`

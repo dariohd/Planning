@@ -52,8 +52,19 @@ export async function getInitialData(
     .map((p) => ({ id: p.id, name: fullName(p) }));
 
   const config = await prisma.appConfig.findUnique({ where: { id: "default" } });
+  const configData = (config?.data as {
+    appName?: string;
+    groupByMachine?: boolean;
+    holidayCountry?: "FR" | "PT";
+    workstations?: string[];
+    missions?: string[];
+  }) ?? {};
   const settings = {
-    appName: (config?.data as { appName?: string })?.appName ?? "Planning Présence",
+    appName: configData.appName ?? "Planning Présence",
+    groupByMachine: configData.groupByMachine ?? false,
+    holidayCountry: configData.holidayCountry ?? "FR",
+    workstations: configData.workstations ?? [],
+    missions: configData.missions ?? ["Mi"],
   };
 
   return {

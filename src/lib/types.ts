@@ -30,6 +30,7 @@ export type WeeklySchedule = {
   teamName: string;
   weekDates: string[];
   schedule: Record<string, Record<string, string>>;
+  details?: Record<string, Record<string, DayPresence>>;
   teamMembers: PersonnelRecord[];
   error?: string | null;
 };
@@ -43,5 +44,5 @@ export type InitialData = {
   respPrepList: { id: string; name: string }[];
   respQualiteList: { id: string; name: string }[];
   lastModified: string;
-  settings: { appName: string };
+  settings: { appName: string; groupByMachine?: boolean; holidayCountry?: "FR" | "PT"; workstations?: string[]; missions?: string[] };
 };

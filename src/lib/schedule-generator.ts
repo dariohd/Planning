@@ -1,5 +1,6 @@
-import { getFrenchPublicHolidays } from "./holidays";
+import { getPublicHolidays } from "./holidays";
 import { prisma } from "./db";
+import { getAppConfig } from "./app-config";
 import { calculateShiftForDate } from "./shifts";
 import type { PersonnelRecord } from "./types";
 
@@ -27,7 +28,8 @@ export async function populateInitialScheduleForPerson(
     },
   });
   const existingMap = new Map(existing.map((r) => [r.date, r.status]));
-  const holidays = new Set(getFrenchPublicHolidays(year));
+  const config = await getAppConfig();
+  const holidays = new Set(getPublicHolidays(year, config.holidayCountry));
 
   const toUpsert: { personnelId: string; date: string; status: string }[] = [];
   const cursor = new Date(start.getTime());
@@ -57,6 +59,49 @@ export async function populateInitialScheduleForPerson(
   }
 }
 
+export async function regenerateFutureSchedule(
+  person: PersonnelRecord,
+  fromDateStr: string,
+  holidayCountry: "FR" | "PT" = "FR"
+): Promise<void> {
+  const year = new Date(`${fromDateStr}T12:00:00Z`).getUTCFullYear();
+  const start = new Date(`${fromDateStr}T12:00:00Z`);
+  const end = new Date(Date.UTC(year, 11, 31, 12, 0, 0));
+  const holidays = new Set(getPublicHolidays(year, holidayCountry));
+
+  const existing = await prisma.presence.findMany({
+    where: { personnelId: person.id, date: { startsWith: `${year}-` } },
+  });
+  const existingMap = new Map(existing.map((r) => [r.date, r]));
+
+  const cursor = new Date(start.getTime());
+  while (cursor <= end) {
+    const dateKey = cursor.toISOString().slice(0, 10);
+    if (!holidays.has(dateKey)) {
+      const row = existingMap.get(dateKey);
+      if (!row || !PRESERVE_STATUSES.has(row.status)) {
+        const shift = calculateShiftForDate(person, cursor);
+        if (shift) {
+          await prisma.presence.upsert({
+            where: { personnelId_date: { personnelId: person.id, date: dateKey } },
+            create: { personnelId: person.id, date: dateKey, status: shift },
+            update: { status: shift },
+          });
+        }
+      }
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+}
+
+export async function archivePreviousYearSchedules(yearToArchive: number): Promise<number> {
+  const prefix = `${yearToArchive}-`;
+  const result = await prisma.presence.deleteMany({
+    where: { date: { startsWith: prefix } },
+  });
+  return result.count;
+}
+
 export async function generateYearlySchedules(year: number): Promise<{ created: number; skipped: number }> {
   const personnel = await prisma.personnel.findMany({ where: { statut: { not: "Archivé" } } });
   let created = 0;
@@ -75,4 +120,15 @@ export async function generateYearlySchedules(year: number): Promise<{ created: 
   }
 
   return { created, skipped };
+}
+
+export async function reapplyHolidaysForAllPersonnel(): Promise<{ count: number }> {
+  const config = await getAppConfig();
+  const year = new Date().getFullYear();
+  const personnel = await prisma.personnel.findMany({ where: { statut: { not: "Archivé" } } });
+  for (const person of personnel) {
+    await regenerateFutureSchedule(person as PersonnelRecord, `${year}-01-01`, config.holidayCountry);
+    await regenerateFutureSchedule(person as PersonnelRecord, `${year + 1}-01-01`, config.holidayCountry);
+  }
+  return { count: personnel.length };
 }

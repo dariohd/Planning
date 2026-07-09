@@ -9,6 +9,7 @@ const schema = z.object({
   startDate: z.string(),
   endDate: z.string(),
   status: z.string(),
+  location: z.string().optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   while (cursor <= end) {
     const dk = cursor.toISOString().slice(0, 10);
-    await setPresence(body.personnelId, dk, body.status);
+    await setPresence(body.personnelId, dk, body.status, body.location ?? null);
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 

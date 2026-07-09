@@ -17,6 +17,7 @@ export function MobilePresenceSheet({ open, date, memberName, current, canEdit, 
   const [status, setStatus] = useState(current.status);
   const [comment, setComment] = useState(current.comment ?? "");
   const [hs, setHs] = useState(current.hs ?? "");
+  const [location, setLocation] = useState(current.location ?? "");
 
   if (!open) return null;
 
@@ -49,6 +50,14 @@ export function MobilePresenceSheet({ open, date, memberName, current, canEdit, 
 
         {canEdit && (
           <>
+            {current.status === "Mi" && (
+              <input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Lieu mission"
+                className="w-full rounded-xl border px-3 py-2 text-sm mb-2"
+              />
+            )}
             <input
               value={comment}
               onChange={(e) => setComment(e.target.value)}
@@ -63,7 +72,7 @@ export function MobilePresenceSheet({ open, date, memberName, current, canEdit, 
             />
             <button
               type="button"
-              onClick={() => { onSave({ status, comment, hs }); onClose(); }}
+              onClick={() => { onSave({ status, comment, hs, location: status === "Mi" ? location : undefined }); onClose(); }}
               className="w-full py-3 rounded-2xl bg-[#00205b] text-white font-bold"
             >
               Enregistrer

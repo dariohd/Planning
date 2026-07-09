@@ -42,3 +42,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   await touchLastModified();
   return NextResponse.json(updated);
 }
+
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const authResult = await requireSession();
+  if ("error" in authResult && authResult.error) return authResult.error;
+
+  if (authResult.session!.user!.role !== "Administrateur") {
+    return NextResponse.json({ error: "Administrateur requis." }, { status: 403 });
+  }
+
+  const { id } = await params;
+  await prisma.presence.deleteMany({ where: { personnelId: id } });
+  await prisma.personnel.delete({ where: { id } });
+  await touchLastModified();
+  return NextResponse.json({ success: true });
+}

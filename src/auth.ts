@@ -31,11 +31,32 @@ const providers: Provider[] = [
       if (demoUsername && demoPassword && safeEqual(username, demoUsername) && safeEqual(password, demoPassword)) {
         const email = (process.env.DEMO_USER_EMAIL ?? `${username.toLowerCase()}@demo.planning.local`).toLowerCase();
         const role = envValue("DEMO_USER_ROLE") ?? "Lecteur";
+        let personnelId: string | null = null;
         try {
+          const demoPersonName = envValue("DEMO_PERSONNEL_NAME");
+          if (demoPersonName) {
+            const [prenom, ...rest] = demoPersonName.trim().split(/\s+/);
+            const nom = rest.join(" ");
+            const match = await prisma.personnel.findFirst({
+              where: {
+                prenom: { equals: prenom, mode: "insensitive" },
+                nom: nom ? { equals: nom, mode: "insensitive" } : undefined,
+              },
+            });
+            personnelId = match?.id ?? null;
+          } else if (role === "REAP") {
+            const key = username.toLowerCase().replace(/[^a-z]/g, "");
+            const reaps = await prisma.personnel.findMany({ where: { role: "REAP" } });
+            const match = reaps.find((p) => {
+              const n = `${p.prenom}${p.nom}`.toLowerCase().replace(/[^a-z]/g, "");
+              return n.includes(key) || key.includes(n);
+            });
+            personnelId = match?.id ?? null;
+          }
           await prisma.user.upsert({
             where: { email },
-            create: { email, role, name: username },
-            update: { role, name: username },
+            create: { email, role, name: username, personnelId },
+            update: { role, name: username, ...(personnelId ? { personnelId } : {}) },
           });
         } catch (e) {
           console.error("Demo login DB sync skipped:", e);

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppMode, DayPresence, InitialData, PersonnelRecord, WeeklySchedule } from "@/lib/types";
-import { ALL_STATUSES } from "@/lib/constants";
+import { computeIndividualCounters } from "@/lib/counters";
+import { ALL_STATUSES, DISPLAY_POSTES } from "@/lib/constants";
 import { TeamMonthlyTable } from "@/components/desktop/TeamMonthlyTable";
 import { TeamFilterDropdown } from "@/components/desktop/TeamFilterDropdown";
 import { usePlanningFilters } from "@/lib/usePlanningFilters";
@@ -17,6 +18,8 @@ import { MassUpdateModal } from "@/components/desktop/MassUpdateModal";
 import { PersonnelForm } from "@/components/desktop/PersonnelForm";
 import { SettingsModal } from "@/components/desktop/SettingsModal";
 import { t, type Lang } from "@/lib/i18n";
+import { HelpChatbot } from "@/components/shared/HelpChatbot";
+import { useToast } from "@/components/shared/ToastProvider";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 
@@ -41,18 +44,30 @@ type MonthlyData = {
 
 export default function DesktopApp() {
   const { data: session } = useSession();
+  const { showToast } = useToast();
   const [filters, setFilters] = usePlanningFilters("desktop", {
     teamSelections: ["Tous"] as string[],
     teamPeriod: "month" as TeamPeriod,
     mode: "production" as AppMode,
     lang: "fr" as Lang,
+    shiftFilter: "Tous",
+    workstationFilter: "Tous",
+    showAnnual: false,
+    sortPersonnel: "nom" as "nom" | "role",
   });
-  const [lang, setLang] = useState<Lang>("fr");
-  const [mode, setMode] = useState<AppMode>("production");
+  const lang = filters.lang as Lang;
+  const mode = filters.mode as AppMode;
+  const teamPeriod = filters.teamPeriod as TeamPeriod;
+  const teamSelections = filters.teamSelections as string[];
+  const shiftFilter = String(filters.shiftFilter ?? "Tous");
+  const workstationFilter = String(filters.workstationFilter ?? "Tous");
+  const showAnnual = Boolean(filters.showAnnual);
+  const sortPersonnel = (filters.sortPersonnel as "nom" | "role") ?? "nom";
+  const patchFilters = useCallback(
+    (patch: Record<string, unknown>) => setFilters((prev) => ({ ...prev, ...patch })),
+    [setFilters]
+  );
   const [view, setView] = useState<View>("equipe");
-  const [teamPeriod, setTeamPeriod] = useState<TeamPeriod>("month");
-  const [teamSelections, setTeamSelections] = useState<string[]>(["Tous"]);
-  const [shiftFilter, setShiftFilter] = useState("Tous");
   const [data, setData] = useState<InitialData | null>(null);
   const [weekStart, setWeekStart] = useState(getMondayOfWeek());
   const [weekly, setWeekly] = useState<WeeklySchedule | null>(null);
@@ -60,6 +75,7 @@ export default function DesktopApp() {
   const [selectedPerson, setSelectedPerson] = useState<PersonnelRecord | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [roleFilter, setRoleFilter] = useState("Tous");
+  const [reapFilter, setReapFilter] = useState("Tous");
   const [yearPresences, setYearPresences] = useState<Record<string, DayPresence>>({});
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const d = new Date();
@@ -81,6 +97,15 @@ export default function DesktopApp() {
   const canEdit = canUserEdit(userRole);
   const isAdmin = isAdministrator(userRole);
 
+  const appConfig = useMemo(
+    () => ({
+      groupByMachine: data?.settings.groupByMachine ?? false,
+      holidayCountry: data?.settings.holidayCountry ?? "FR",
+      workstations: data?.settings.workstations?.length ? data.settings.workstations : [...DISPLAY_POSTES],
+    }),
+    [data]
+  );
+
   const loadInitial = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -97,7 +122,9 @@ export default function DesktopApp() {
     setLoading(false);
   }, [mode, showArchived]);
 
-  const selectionParam = teamSelections.join("||");
+  const selectionParam = teamSelections
+    .map((s) => (s === "Non affectés 3×8" ? "__UNASSIGNED_3x8__" : s))
+    .join("||");
 
   const loadWeekly = useCallback(async () => {
     const params = new URLSearchParams({ selection: selectionParam, weekStart, mode, shiftFilter });
@@ -128,18 +155,24 @@ export default function DesktopApp() {
   }, [teamPeriod, loadWeekly, loadMonthly]);
 
   useEffect(() => {
-    loadInitial();
+    // Chargement initial serveur
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch au montage
+    void loadInitial();
   }, [loadInitial]);
 
   useEffect(() => {
     if (view === "equipe" || view === "capa") {
-      if (teamPeriod === "week") loadWeekly();
-      else loadMonthly();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch dépendant des filtres
+      if (teamPeriod === "week") void loadWeekly();
+      else void loadMonthly();
     }
   }, [view, teamPeriod, loadWeekly, loadMonthly]);
 
   useEffect(() => {
-    if (selectedPerson) loadPersonYear(selectedPerson.id, calendarMonth.year);
+    if (selectedPerson) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch calendrier individuel
+      void loadPersonYear(selectedPerson.id, calendarMonth.year);
+    }
   }, [selectedPerson, calendarMonth.year, loadPersonYear]);
 
   useEffect(() => {
@@ -159,14 +192,24 @@ export default function DesktopApp() {
 
   const teamOptions = useMemo(() => {
     if (!data) return ["Tous"];
-    return ["Tous", ...data.chefsEquipe.map((c) => `${c.name} (${c.role})`)];
+    return ["Tous", "Non affectés 3×8", ...data.chefsEquipe.map((c) => `${c.name} (${c.role})`)];
   }, [data]);
 
   const filteredPersonnel = useMemo(() => {
     if (!data) return [];
-    if (roleFilter === "Tous") return data.personnel;
-    return data.personnel.filter((p) => p.role === roleFilter);
-  }, [data, roleFilter]);
+    let list = data.personnel;
+    if (roleFilter !== "Tous") list = list.filter((p) => p.role === roleFilter);
+    if (reapFilter !== "Tous") list = list.filter((p) => p.chefEquipeAssocie === reapFilter);
+    list = [...list].sort((a, b) =>
+      sortPersonnel === "role" ? a.role.localeCompare(b.role) || fullName(a).localeCompare(fullName(b)) : fullName(a).localeCompare(fullName(b))
+    );
+    return list;
+  }, [data, roleFilter, reapFilter, sortPersonnel]);
+
+  const individualCounters = useMemo(
+    () => (selectedPerson ? computeIndividualCounters(yearPresences) : null),
+    [selectedPerson, yearPresences]
+  );
 
   const shiftWeek = (delta: number) => {
     const d = new Date(`${weekStart}T12:00:00Z`);
@@ -188,6 +231,7 @@ export default function DesktopApp() {
     location?: string;
   }) => {
     if (!editor || !canEdit) return;
+    const old = { ...editor };
     await fetch("/api/presences/details", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -205,6 +249,17 @@ export default function DesktopApp() {
     if (selectedPerson?.id === editor.personnelId) {
       loadPersonYear(editor.personnelId, calendarMonth.year);
     }
+    showToast("Statut enregistré", {
+      undo: {
+        type: "details",
+        personnelId: old.personnelId,
+        date: old.date,
+        oldStatus: old.status,
+        oldComment: old.comment,
+        oldHs: old.hs,
+        oldLocation: old.location,
+      },
+    });
   };
 
   const applyRange = async () => {
@@ -220,8 +275,7 @@ export default function DesktopApp() {
       }),
     });
     loadPersonYear(selectedPerson.id, calendarMonth.year);
-    setAdminMsg("Plage appliquée");
-    setTimeout(() => setAdminMsg(null), 3000);
+    showToast("Plage appliquée");
   };
 
   const applyMassUpdate = async (payload: {
@@ -237,8 +291,7 @@ export default function DesktopApp() {
       body: JSON.stringify(payload),
     });
     refreshTeam();
-    setAdminMsg(`Modification groupée : ${payload.personnelIds.length} personne(s)`);
-    setTimeout(() => setAdminMsg(null), 4000);
+    showToast(`Modification groupée : ${payload.personnelIds.length} personne(s)`);
   };
 
   const archivePerson = async () => {
@@ -280,7 +333,7 @@ export default function DesktopApp() {
   };
 
   const openPrint = () => {
-    const params = new URLSearchParams({ selection: selectionParam, weekStart, mode, lang });
+    const params = new URLSearchParams({ selection: selectionParam, weekStart, mode, lang, shiftFilter });
     window.open(`/api/print/week?${params}`, "_blank");
   };
 
@@ -332,6 +385,7 @@ export default function DesktopApp() {
   return (
     <div className="min-h-screen">
       <PresenceEditor
+        key={editor ? `${editor.personnelId}-${editor.date}` : "closed"}
         open={!!editor}
         personnelId={editor?.personnelId ?? ""}
         date={editor?.date ?? ""}
@@ -342,6 +396,7 @@ export default function DesktopApp() {
           location: editor?.location,
         }}
         canEdit={canEdit}
+        missions={data?.settings.missions ?? ["Mi"]}
         onSave={savePresenceDetails}
         onClose={() => setEditor(null)}
       />
@@ -354,9 +409,11 @@ export default function DesktopApp() {
       />
 
       <PersonnelForm
+        key={selectedPerson?.id ?? "new"}
         open={personFormOpen}
         data={data}
         person={selectedPerson}
+        workstations={appConfig.workstations}
         onSaved={loadInitial}
         onClose={() => setPersonFormOpen(false)}
       />
@@ -364,7 +421,7 @@ export default function DesktopApp() {
       <SettingsModal
         open={settingsOpen}
         isAdmin={isAdmin}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => { setSettingsOpen(false); void loadInitial(); }}
         onGenerateYear={generateYear}
       />
 
@@ -384,8 +441,8 @@ export default function DesktopApp() {
             <button
               key={v}
               type="button"
-              className="nav-link px-4 py-2 rounded-xl text-sm font-bold"
-              aria-selected={view === v}
+              className={`nav-link px-4 py-2 rounded-xl text-sm font-bold ${view === v ? "bg-[#00205b] text-white" : ""}`}
+              aria-current={view === v ? "page" : undefined}
               onClick={() => setView(v)}
             >
               {t(lang, v === "equipe" ? "team" : v === "individuelle" ? "individual" : v === "indicateurs" ? "indicators" : "capa")}
@@ -399,12 +456,12 @@ export default function DesktopApp() {
               Config
             </button>
           )}
-          <select value={lang} onChange={(e) => setLang(e.target.value as Lang)} className="rounded-xl border px-2 py-2 text-xs font-bold" aria-label="Langue">
+          <select value={lang} onChange={(e) => patchFilters({ lang: e.target.value })} className="rounded-xl border px-2 py-2 text-xs font-bold" aria-label="Langue">
             <option value="fr">FR</option>
             <option value="en">EN</option>
             <option value="pt">PT</option>
           </select>
-          <button type="button" onClick={() => setMode(mode === "production" ? "support" : "production")} className="px-4 py-2 rounded-xl text-sm font-bold border border-[#00205b] text-[#00205b]">
+          <button type="button" onClick={() => patchFilters({ mode: mode === "production" ? "support" : "production" })} className="px-4 py-2 rounded-xl text-sm font-bold border border-[#00205b] text-[#00205b]">
             {t(lang, mode)}
           </button>
           <button type="button" onClick={() => signOut()} className="px-3 py-2 text-sm text-slate-500">
@@ -421,15 +478,19 @@ export default function DesktopApp() {
         {view === "equipe" && (
           <section className="glass rounded-3xl p-6">
             <div className="flex flex-wrap gap-3 items-center mb-6">
-              <TeamFilterDropdown options={teamOptions} selected={teamSelections} onChange={setTeamSelections} />
-              <select value={shiftFilter} onChange={(e) => setShiftFilter(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
+              <TeamFilterDropdown options={teamOptions} selected={teamSelections} onChange={(v) => patchFilters({ teamSelections: v })} />
+              <select value={shiftFilter} onChange={(e) => patchFilters({ shiftFilter: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
                 {["Tous", "M", "A", "N", "J"].map((s) => (
                   <option key={s} value={s}>Quart {s}</option>
                 ))}
               </select>
+              <select value={workstationFilter} onChange={(e) => patchFilters({ workstationFilter: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
+                <option value="Tous">Poste Tous</option>
+                {(appConfig.workstations ?? DISPLAY_POSTES).map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
               <div className="flex rounded-xl border overflow-hidden text-sm font-bold">
-                <button type="button" className={`px-3 py-2 ${teamPeriod === "month" ? "bg-[#00205b] text-white" : "bg-white"}`} onClick={() => setTeamPeriod("month")}>Mois</button>
-                <button type="button" className={`px-3 py-2 ${teamPeriod === "week" ? "bg-[#00205b] text-white" : "bg-white"}`} onClick={() => setTeamPeriod("week")}>Semaine</button>
+                <button type="button" className={`px-3 py-2 ${teamPeriod === "month" ? "bg-[#00205b] text-white" : "bg-white"}`} onClick={() => patchFilters({ teamPeriod: "month" })}>Mois</button>
+                <button type="button" className={`px-3 py-2 ${teamPeriod === "week" ? "bg-[#00205b] text-white" : "bg-white"}`} onClick={() => patchFilters({ teamPeriod: "week" })}>Semaine</button>
               </div>
               <button type="button" onClick={openPrint} className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-[#00205b] text-[#00205b]">{t(lang, "print")}</button>
               {canEdit && (
@@ -456,6 +517,9 @@ export default function DesktopApp() {
                 userRole={userRole}
                 userName={data.currentUser.name}
                 userPersonnelId={data.currentUser.personnelId}
+                groupByPoste={appConfig.groupByMachine}
+                workstationFilter={workstationFilter}
+                holidayCountry={appConfig.holidayCountry ?? "FR"}
                 onCellClick={openCellEditor}
               />
             ) : (
@@ -480,12 +544,14 @@ export default function DesktopApp() {
                       </td>
                       {weekly.weekDates.map((date) => {
                         const status = weekly.schedule[member.id]?.[date] ?? "";
+                        const cellDetails = weekly.details?.[member.id]?.[date];
                         return (
                           <StatusCell
                             key={date}
                             status={status}
+                            details={cellDetails}
                             className={`text-[10px] p-0.5 ${!canEditCell ? "opacity-60" : ""}`}
-                            onClick={canEditCell ? () => openCellEditor(member.id, date, status) : undefined}
+                            onClick={canEditCell ? () => openCellEditor(member.id, date, status, cellDetails) : undefined}
                           />
                         );
                       })}
@@ -511,11 +577,19 @@ export default function DesktopApp() {
                   </button>
                 )}
               </div>
-              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="w-full mb-3 rounded-xl border px-3 py-2 text-sm">
-                <option value="Tous">Tous les rôles</option>
+              <select value={reapFilter} onChange={(e) => setReapFilter(e.target.value)} className="w-full mb-2 rounded-xl border px-3 py-2 text-sm">
+                <option value="Tous">Tous les REAP</option>
+                {data.reapListForForm.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+              <div className="flex flex-wrap gap-1 mb-3">
+                <button type="button" onClick={() => setRoleFilter("Tous")} className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${roleFilter === "Tous" ? "bg-[#00205b] text-white" : ""}`}>Tous</button>
                 {[...new Set(data.personnel.map((p) => p.role))].sort().map((r) => (
-                  <option key={r} value={r}>{r}</option>
+                  <button key={r} type="button" onClick={() => setRoleFilter(r)} className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${roleFilter === r ? "bg-[#00205b] text-white" : ""}`}>{r}</button>
                 ))}
+              </div>
+              <select value={sortPersonnel} onChange={(e) => patchFilters({ sortPersonnel: e.target.value })} className="w-full mb-3 rounded-xl border px-3 py-2 text-sm">
+                <option value="nom">Tri par nom</option>
+                <option value="role">Tri par rôle</option>
               </select>
               <input
                 placeholder={t(lang, "search")}
@@ -566,8 +640,27 @@ export default function DesktopApp() {
                       <button type="button" className="px-3 py-1 rounded-lg border" onClick={() => setCalendarMonth((m) => { const d = new Date(Date.UTC(m.year, m.month - 1, 1)); return { year: d.getUTCFullYear(), month: d.getUTCMonth() }; })}>←</button>
                       <span className="font-bold text-sm px-2">{calendarMonth.month + 1}/{calendarMonth.year}</span>
                       <button type="button" className="px-3 py-1 rounded-lg border" onClick={() => setCalendarMonth((m) => { const d = new Date(Date.UTC(m.year, m.month + 1, 1)); return { year: d.getUTCFullYear(), month: d.getUTCMonth() }; })}>→</button>
+                      <button type="button" onClick={() => patchFilters({ showAnnual: !showAnnual })} className={`px-3 py-1 rounded-lg border text-xs font-bold ${showAnnual ? "bg-[#00205b] text-white" : ""}`}>Année</button>
                     </div>
                   </div>
+
+                  {individualCounters && (
+                    <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-6">
+                      {[
+                        { label: "CP", value: individualCounters.cp },
+                        { label: "JRTT", value: individualCounters.jrtt },
+                        { label: "Maladie", value: individualCounters.maladie },
+                        { label: "Formation", value: individualCounters.formation },
+                        { label: "Présence", value: individualCounters.presence },
+                        { label: "Hors prod.", value: individualCounters.horsProd },
+                      ].map((c) => (
+                        <div key={c.label} className="bg-white/70 rounded-xl p-2 text-center border">
+                          <div className="text-lg font-black text-[#00205b]">{c.value}</div>
+                          <div className="text-[10px] font-bold text-slate-500 uppercase">{c.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {canEdit && (
                     <div className="mb-6 p-4 rounded-2xl bg-white/60 border border-slate-200">
@@ -584,6 +677,8 @@ export default function DesktopApp() {
                     </div>
                   )}
 
+                  {!showAnnual ? (
+                  <>
                   <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-500 mb-2">
                     {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => <div key={d}>{d}</div>)}
                   </div>
@@ -607,15 +702,45 @@ export default function DesktopApp() {
                       );
                     })}
                   </div>
+                  </>
+                  ) : (
+                  <div className="grid md:grid-cols-3 gap-4">
+                    {Array.from({ length: 12 }, (_, mi) => {
+                      const month = mi;
+                      const count = new Date(Date.UTC(calendarMonth.year, month + 1, 0)).getUTCDate();
+                      const first = new Date(Date.UTC(calendarMonth.year, month, 1));
+                      const pad = (first.getUTCDay() + 6) % 7;
+                      return (
+                        <div key={month} className="bg-white/60 rounded-2xl p-3 border">
+                          <p className="text-xs font-black text-[#00205b] mb-2">{month + 1}/{calendarMonth.year}</p>
+                          <div className="grid grid-cols-7 gap-0.5 text-[8px]">
+                            {Array.from({ length: pad }).map((_, i) => <div key={`p-${i}`} />)}
+                            {Array.from({ length: count }, (_, d) => {
+                              const day = d + 1;
+                              const dateKey = `${calendarMonth.year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                              const status = yearPresences[dateKey]?.s ?? "";
+                              return (
+                                <button key={day} type="button" onClick={() => openCellEditor(selectedPerson!.id, dateKey, status, yearPresences[dateKey])} className={`aspect-square rounded text-center ${status ? "bg-[#00b5e2]/30 font-bold" : "hover:bg-slate-100"}`}>
+                                  {day}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  )}
                 </>
               )}
             </div>
           </section>
         )}
 
-        {view === "indicateurs" && <IndicatorsView mode={mode} selection={selectionParam} date={indicatorDate} />}
-        {view === "capa" && <CapaView mode={mode} weekStart={weekStart} />}
+        {view === "indicateurs" && <IndicatorsView key={indicatorDate} mode={mode} selection={selectionParam} date={indicatorDate} teamOptions={teamOptions} />}
+        {view === "capa" && <CapaView key={weekStart} mode={mode} weekStart={weekStart} isAdmin={isAdmin} />}
       </main>
+      <HelpChatbot lang={lang} />
     </div>
   );
 }

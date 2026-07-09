@@ -3,7 +3,8 @@ import { requireSession } from "@/lib/api-auth";
 import { prisma } from "@/lib/db";
 import { filterPersonnelByMode, toPersonnelRecord } from "@/lib/personnel";
 import { ensureModificationAllowed, touchLastModified } from "@/lib/permissions";
-import { populateInitialScheduleForPerson } from "@/lib/schedule-generator";
+import { populateInitialScheduleForPerson, regenerateFutureSchedule } from "@/lib/schedule-generator";
+import { getAppConfig } from "@/lib/app-config";
 import type { AppMode } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
 
   if (body.id) {
     await ensureModificationAllowed(email, body.id);
+    const existing = await prisma.personnel.findUnique({ where: { id: body.id } });
     const updated = await prisma.personnel.update({
       where: { id: body.id },
       data: {
@@ -66,6 +68,14 @@ export async function POST(req: NextRequest) {
         tauxEfficacite: body.tauxEfficacite ?? 100,
       },
     });
+    const quartChanged =
+      existing &&
+      (existing.typeQuart !== updated.typeQuart || existing.quartDefaut !== updated.quartDefaut);
+    if (quartChanged && updated.typeQuart && updated.quartDefaut) {
+      const config = await getAppConfig();
+      const fromDate = body.startDate ?? new Date().toISOString().slice(0, 10);
+      await regenerateFutureSchedule(toPersonnelRecord(updated), fromDate, config.holidayCountry);
+    }
     await touchLastModified();
     return NextResponse.json(toPersonnelRecord(updated));
   }

@@ -1,5 +1,5 @@
 import { prisma } from "./db";
-import type { DayPresence, PresenceMap } from "./types";
+import type { PresenceMap } from "./types";
 
 export async function getPresencesForYear(personnelId: string, year: number): Promise<PresenceMap> {
   const rows = await prisma.presence.findMany({
