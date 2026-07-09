@@ -32,6 +32,16 @@ async function main() {
     await ensureAdmins();
     await linkDemoUser().catch((e) => console.warn("Liaison compte démo ignorée:", e));
 
+    if (process.env.GAS_WEB_APP_URL?.trim()) {
+      try {
+        const { importPresencesFromGasUrl } = await import("../src/lib/import-presences");
+        const result = await importPresencesFromGasUrl(process.env.GAS_WEB_APP_URL);
+        console.log(`Import GAS : ${result.imported} présences (${result.skipped} ignorées).`);
+      } catch (e) {
+        console.warn("Import GAS au build ignoré:", e);
+      }
+    }
+
     const scheduleResult = await maybeGenerateYearlySchedules();
     if (scheduleResult) {
       console.log(`Plannings générés : ${scheduleResult.created} créés, ${scheduleResult.skipped} ignorés.`);
