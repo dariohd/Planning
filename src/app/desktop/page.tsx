@@ -453,7 +453,7 @@ export default function DesktopApp() {
           </Link>
           {isAdmin && (
             <button type="button" onClick={() => setSettingsOpen(true)} className="px-3 py-2 rounded-xl border text-sm font-bold">
-              Config
+              Paramètres
             </button>
           )}
           <select value={lang} onChange={(e) => patchFilters({ lang: e.target.value })} className="rounded-xl border px-2 py-2 text-xs font-bold" aria-label="Langue">

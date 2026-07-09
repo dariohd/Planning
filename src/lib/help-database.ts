@@ -62,7 +62,10 @@ export const helpDatabase: Record<HelpLang, Record<string, HelpCategory>> = {
       color: "bg-indigo-50 text-indigo-600",
       questions: [
         { q: "Imprimer le planning ?", a: "Vue Équipe, mode semaine, icône Imprimer." },
-        { q: "Exporter le personnel ?", a: "Paramètres > Actions > Exporter personnel (CSV)." },
+        { q: "Exporter le personnel ?", a: "Paramètres > Actions > Export CSV par rôle." },
+        { q: "Sauvegarder toutes les données ?", a: "Paramètres > Données > Exporter tout (JSON)." },
+        { q: "Lier Google Sheets ?", a: "Paramètres > Données : ID classeur ou Web App GAS, puis Envoyer / Importer." },
+        { q: "Supprimer toutes les données ?", a: "Paramètres > Données > Zone dangereuse. Export proposé avant suppression." },
       ],
     },
   },

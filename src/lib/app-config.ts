@@ -27,6 +27,9 @@ export type AppConfigData = {
   capaRules: Record<string, CapaRule>;
   targetMode: "manual" | "auto";
   roles: string[];
+  dataStorage: "database" | "google_sheets";
+  sheetsSpreadsheetId: string;
+  sheetsWebAppUrl: string;
 };
 
 export const DEFAULT_CONFIG: AppConfigData = {
@@ -44,6 +47,9 @@ export const DEFAULT_CONFIG: AppConfigData = {
     DISPLAY_POSTES.map((p) => [p, { calcMode: "shift" as const, includedStations: p, prodTime: 10 }])
   ),
   targetMode: "manual",
+  dataStorage: "database",
+  sheetsSpreadsheetId: "",
+  sheetsWebAppUrl: "",
   roles: [
     "Administrateur",
     "REAP",
@@ -73,6 +79,9 @@ export async function getAppConfig(): Promise<AppConfigData> {
     sectorsConfig: data.sectorsConfig ?? [],
     capaRules: { ...DEFAULT_CONFIG.capaRules, ...(data.capaRules ?? {}) },
     roles: data.roles?.length ? data.roles : DEFAULT_CONFIG.roles,
+    dataStorage: data.dataStorage ?? DEFAULT_CONFIG.dataStorage,
+    sheetsSpreadsheetId: data.sheetsSpreadsheetId ?? "",
+    sheetsWebAppUrl: data.sheetsWebAppUrl ?? "",
   };
 }
 
