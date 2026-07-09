@@ -61,6 +61,7 @@ export async function getInitialData(
       email,
       name: user?.name ?? nameFromEmail(email),
       role,
+      personnelId: user?.personnelId ?? null,
     },
     personnel: modePersonnel,
     chefsEquipe: chefsEquipe.sort((a, b) => a.name.localeCompare(b.name)),

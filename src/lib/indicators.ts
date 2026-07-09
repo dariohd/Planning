@@ -2,7 +2,7 @@ import { prisma } from "./db";
 import { PRESENT_STATUSES } from "./constants";
 import { filterPersonnelByMode, fullName, toPersonnelRecord } from "./personnel";
 import { getPresencesForRange } from "./presences";
-import { getTeamMembersOptimized } from "./team";
+import { getTeamMembersFromSelections, parseTeamSelections } from "./team";
 import type { AppMode } from "./types";
 
 const ABSENCE_STATUSES = ["Ma", "LMa", "CP", "4HCP", "Abs", "F", "4HF", "RF", "JRTT", "CET", "D", "P", "S", "Z", "Ecole", "Mi"];
@@ -43,8 +43,8 @@ export async function getIndicatorsData(
     `${referenceDate.getUTCFullYear()}-12-31`
   );
 
-  const teamMembers = getTeamMembersOptimized(
-    teamSelection,
+  const teamMembers = getTeamMembersFromSelections(
+    parseTeamSelections(teamSelection),
     referenceDate,
     rawPersonnel,
     presencesByPerson

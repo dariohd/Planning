@@ -35,7 +35,7 @@ export type WeeklySchedule = {
 };
 
 export type InitialData = {
-  currentUser: { email: string; name: string; role: string };
+  currentUser: { email: string; name: string; role: string; personnelId?: string | null };
   personnel: PersonnelRecord[];
   chefsEquipe: { name: string; role: string }[];
   rpList: { id: string; name: string }[];

@@ -48,6 +48,20 @@ export function IndicatorsView({ mode, selection, date }: Props) {
 
   const g1 = data.compagnons[period];
   const g2 = data.interimaires[period];
+  const presentTotal = (g1.presence?.length ?? 0) + (g2.presence?.length ?? 0);
+  const absentTotal =
+    (g1.Ma?.length ?? 0) + (g1.CP?.length ?? 0) + (g1.Abs?.length ?? 0) +
+    (g2.Ma?.length ?? 0) + (g2.CP?.length ?? 0) + (g2.Abs?.length ?? 0);
+  const rate = data.workforceTotals.total > 0
+    ? Math.round((presentTotal / data.workforceTotals.total) * 100)
+    : 0;
+
+  const kpis = [
+    { label: "Présents", value: presentTotal, color: "text-[#00b5e2]" },
+    { label: "Taux présence", value: `${rate}%`, color: "text-emerald-600" },
+    { label: "Absences", value: absentTotal, color: "text-red-600" },
+    { label: "Effectif", value: data.workforceTotals.total, color: "text-[#00205b]" },
+  ];
 
   const presenceChart = {
     labels: [data.labels.group1, data.labels.group2],
@@ -89,6 +103,15 @@ export function IndicatorsView({ mode, selection, date }: Props) {
 
   return (
     <section className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((k) => (
+          <div key={k.label} className="glass rounded-2xl p-4 text-center">
+            <div className={`text-2xl font-black ${k.color}`}>{k.value}</div>
+            <div className="text-xs font-bold text-slate-500 uppercase mt-1">{k.label}</div>
+          </div>
+        ))}
+      </div>
+
       <div className="flex flex-wrap gap-2 items-center">
         <span className="text-sm font-bold text-slate-500">Période :</span>
         {(["daily", "weekly", "monthly"] as const).map((p) => (

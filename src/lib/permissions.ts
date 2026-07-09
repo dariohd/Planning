@@ -27,7 +27,8 @@ export async function ensureModificationAllowed(
   targetPersonnelId: string,
   allPersonnel?: PersonnelRecord[]
 ): Promise<void> {
-  const userRole = await getUserRole(currentUserEmail);
+  const user = await prisma.user.findUnique({ where: { email: currentUserEmail.toLowerCase() } });
+  const userRole = user?.role ?? "Non Autorisé";
   if (userRole === "Administrateur") return;
   if (userRole === "Lecteur") {
     throw new Error("Accès refusé. Vous disposez de droits en lecture seule.");
@@ -40,19 +41,39 @@ export async function ensureModificationAllowed(
   const personToModify = personnel.find((p) => p.id === targetPersonnelId);
   if (!personToModify) throw new Error("Personnel cible introuvable.");
 
-  const currentUserFullName = nameFromEmail(currentUserEmail);
+  if (user?.personnelId) {
+    const manager = personnel.find((p) => p.id === user.personnelId);
+    if (manager) {
+      if (
+        personToModify.chefEquipeAssocie === manager.id ||
+        personToModify.responsableHierarchique === manager.id
+      ) {
+        return;
+      }
+      if (manager.role === "Pilote" && personToModify.section === manager.section) return;
+    }
+  }
+
+  const currentUserFullName = user?.name ?? nameFromEmail(currentUserEmail);
   const currentUserAsManager = personnel.find(
-    (p) => fullName(p) === currentUserFullName && p.role === userRole
+    (p) =>
+      fullName(p).toLowerCase() === currentUserFullName.toLowerCase() && p.role === userRole
   );
 
   if (!currentUserAsManager) {
     const peers = PEER_PERMISSIONS[userRole];
     if (peers?.includes(personToModify.role)) return;
+    if (userRole === "REAP" && ["Compagnon", "Intérimaire", "Apprenti Atelier", "Pilote"].includes(personToModify.role)) {
+      return;
+    }
   } else {
     if (
       personToModify.responsableHierarchique === currentUserAsManager.id ||
       personToModify.chefEquipeAssocie === currentUserAsManager.id
     ) {
+      return;
+    }
+    if (currentUserAsManager.role === "Pilote" && personToModify.section === currentUserAsManager.section) {
       return;
     }
   }

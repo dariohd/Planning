@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppMode, DayPresence, InitialData, PersonnelRecord, WeeklySchedule } from "@/lib/types";
 import { ALL_STATUSES } from "@/lib/constants";
-import { canUserEdit, isAdministrator } from "@/lib/client-permissions";
+import { TeamMonthlyTable } from "@/components/desktop/TeamMonthlyTable";
+import { TeamFilterDropdown } from "@/components/desktop/TeamFilterDropdown";
+import { usePlanningFilters } from "@/lib/usePlanningFilters";
+import { canModifyPerson, canUserEdit, isAdministrator } from "@/lib/client-permissions";
 import { getMondayOfWeek } from "@/lib/shifts";
 import { fullName } from "@/lib/personnel";
 import { StatusCell } from "@/components/shared/StatusCell";
@@ -38,14 +41,20 @@ type MonthlyData = {
 
 export default function DesktopApp() {
   const { data: session } = useSession();
+  const [filters, setFilters] = usePlanningFilters("desktop", {
+    teamSelections: ["Tous"] as string[],
+    teamPeriod: "month" as TeamPeriod,
+    mode: "production" as AppMode,
+    lang: "fr" as Lang,
+  });
   const [lang, setLang] = useState<Lang>("fr");
   const [mode, setMode] = useState<AppMode>("production");
   const [view, setView] = useState<View>("equipe");
   const [teamPeriod, setTeamPeriod] = useState<TeamPeriod>("month");
+  const [teamSelections, setTeamSelections] = useState<string[]>(["Tous"]);
+  const [shiftFilter, setShiftFilter] = useState("Tous");
   const [data, setData] = useState<InitialData | null>(null);
   const [weekStart, setWeekStart] = useState(getMondayOfWeek());
-  const [selection, setSelection] = useState("Tous");
-  const [shiftFilter, setShiftFilter] = useState("Tous");
   const [weekly, setWeekly] = useState<WeeklySchedule | null>(null);
   const [monthly, setMonthly] = useState<MonthlyData | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<PersonnelRecord | null>(null);
@@ -88,15 +97,17 @@ export default function DesktopApp() {
     setLoading(false);
   }, [mode, showArchived]);
 
+  const selectionParam = teamSelections.join("||");
+
   const loadWeekly = useCallback(async () => {
-    const params = new URLSearchParams({ selection, weekStart, mode, shiftFilter });
+    const params = new URLSearchParams({ selection: selectionParam, weekStart, mode, shiftFilter });
     const res = await fetch(`/api/team/week?${params}`);
     setWeekly(await res.json());
-  }, [selection, weekStart, mode, shiftFilter]);
+  }, [selectionParam, weekStart, mode, shiftFilter]);
 
   const loadMonthly = useCallback(async () => {
     const params = new URLSearchParams({
-      selection,
+      selection: selectionParam,
       year: String(calendarMonth.year),
       month: String(calendarMonth.month),
       mode,
@@ -104,7 +115,7 @@ export default function DesktopApp() {
     });
     const res = await fetch(`/api/team/month?${params}`);
     setMonthly(await res.json());
-  }, [selection, calendarMonth.year, calendarMonth.month, mode, shiftFilter]);
+  }, [selectionParam, calendarMonth.year, calendarMonth.month, mode, shiftFilter]);
 
   const loadPersonYear = useCallback(async (personId: string, year: number) => {
     const res = await fetch(`/api/presences?personnelId=${personId}&year=${year}`);
@@ -269,7 +280,7 @@ export default function DesktopApp() {
   };
 
   const openPrint = () => {
-    const params = new URLSearchParams({ selection, weekStart, mode, lang });
+    const params = new URLSearchParams({ selection: selectionParam, weekStart, mode, lang });
     window.open(`/api/print/week?${params}`, "_blank");
   };
 
@@ -410,11 +421,7 @@ export default function DesktopApp() {
         {view === "equipe" && (
           <section className="glass rounded-3xl p-6">
             <div className="flex flex-wrap gap-3 items-center mb-6">
-              <select value={selection} onChange={(e) => setSelection(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
-                {teamOptions.map((o) => (
-                  <option key={o} value={o}>{o}</option>
-                ))}
-              </select>
+              <TeamFilterDropdown options={teamOptions} selected={teamSelections} onChange={setTeamSelections} />
               <select value={shiftFilter} onChange={(e) => setShiftFilter(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
                 {["Tous", "M", "A", "N", "J"].map((s) => (
                   <option key={s} value={s}>Quart {s}</option>
@@ -439,40 +446,55 @@ export default function DesktopApp() {
               </div>
             </div>
 
+            {teamPeriod === "month" && monthly ? (
+              <TeamMonthlyTable
+                monthDates={monthly.monthDates}
+                schedule={monthly.schedule}
+                details={monthly.details}
+                teamMembers={monthly.teamMembers}
+                allPersonnel={data.personnel}
+                userRole={userRole}
+                userName={data.currentUser.name}
+                userPersonnelId={data.currentUser.personnelId}
+                onCellClick={openCellEditor}
+              />
+            ) : (
             <div className="overflow-x-auto rounded-2xl border border-slate-300">
               <table className="w-full border-collapse text-sm min-w-[900px]">
                 <thead>
                   <tr className="bg-slate-100">
                     <th className="border border-slate-300 p-2 text-left w-[20%] sticky left-0 bg-slate-100 z-10">Personnel</th>
-                    {(teamPeriod === "week" ? weekly?.weekDates : monthly?.monthDates)?.map((d) => (
+                    {weekly?.weekDates?.map((d) => (
                       <th key={d} className="border border-slate-300 p-1 text-center text-xs min-w-[32px]">{d.slice(8)}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {(teamPeriod === "week" ? weekly?.teamMembers : monthly?.teamMembers)?.map((member) => (
+                  {weekly?.teamMembers?.map((member) => {
+                    const canEditCell = canModifyPerson(userRole, data.currentUser.name, data.currentUser.personnelId, member, data.personnel);
+                    return (
                     <tr key={member.id} className={member.role === "Intérimaire" ? "bg-cyan-50" : ""}>
                       <td className="border border-slate-300 p-2 sticky left-0 bg-white z-10">
                         <div className="font-bold text-xs">{member.nom} {member.prenom}</div>
                         <div className="text-[10px] text-slate-500">{member.posteDeTravail}</div>
                       </td>
-                      {(teamPeriod === "week" ? weekly!.weekDates : monthly!.monthDates).map((date) => {
-                        const status = (teamPeriod === "week" ? weekly!.schedule : monthly!.schedule)[member.id]?.[date] ?? "";
-                        const details = teamPeriod === "month" ? monthly?.details[member.id]?.[date] : undefined;
+                      {weekly.weekDates.map((date) => {
+                        const status = weekly.schedule[member.id]?.[date] ?? "";
                         return (
                           <StatusCell
                             key={date}
                             status={status}
-                            className="text-[10px] p-0.5"
-                            onClick={() => openCellEditor(member.id, date, status, details)}
+                            className={`text-[10px] p-0.5 ${!canEditCell ? "opacity-60" : ""}`}
+                            onClick={canEditCell ? () => openCellEditor(member.id, date, status) : undefined}
                           />
                         );
                       })}
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
+            )}
           </section>
         )}
 
@@ -591,7 +613,7 @@ export default function DesktopApp() {
           </section>
         )}
 
-        {view === "indicateurs" && <IndicatorsView mode={mode} selection={selection} date={indicatorDate} />}
+        {view === "indicateurs" && <IndicatorsView mode={mode} selection={selectionParam} date={indicatorDate} />}
         {view === "capa" && <CapaView mode={mode} weekStart={weekStart} />}
       </main>
     </div>

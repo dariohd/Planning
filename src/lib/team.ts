@@ -61,17 +61,47 @@ export function getTeamMembersOptimized(
   return filtered.sort((a, b) => fullName(a).localeCompare(fullName(b)));
 }
 
+export function parseTeamSelections(selection: string | string[]): string[] {
+  if (Array.isArray(selection)) return selection;
+  if (!selection || selection === "Tous") return ["Tous"];
+  if (selection.includes("||")) return selection.split("||").filter(Boolean);
+  return [selection];
+}
+
+export function getTeamMembersFromSelections(
+  selections: string[],
+  referenceMonday: Date,
+  allPersonnel: PersonnelRecord[],
+  presencesByPerson: Record<string, PresenceMap>,
+  shiftFilter: string | null = null
+): PersonnelRecord[] {
+  if (selections.includes("Tous") || selections.length === 0) {
+    return getTeamMembersOptimized("Tous", referenceMonday, allPersonnel, presencesByPerson, shiftFilter);
+  }
+
+  const memberIds = new Set<string>();
+  for (const sel of selections) {
+    const members = getTeamMembersOptimized(sel, referenceMonday, allPersonnel, presencesByPerson, shiftFilter);
+    for (const m of members) memberIds.add(m.id);
+  }
+
+  return allPersonnel
+    .filter((p) => memberIds.has(p.id))
+    .sort((a, b) => fullName(a).localeCompare(fullName(b)));
+}
+
 export function buildWeeklySchedule(
-  teamSelection: string,
+  teamSelection: string | string[],
   weekStartDateStr: string,
   allPersonnel: PersonnelRecord[],
   presencesByPerson: Record<string, PresenceMap>,
   shiftFilter: string | null = null
 ) {
-  const teamName = teamSelection.replace(" (REAP)", "").replace(" (RP)", "");
+  const selections = parseTeamSelections(teamSelection);
+  const teamName = selections.length === 1 ? selections[0].replace(" (REAP)", "").replace(" (RP)", "") : "Fusion";
   const referenceMonday = new Date(`${weekStartDateStr}T12:00:00Z`);
-  const teamMembers = getTeamMembersOptimized(
-    teamSelection,
+  const teamMembers = getTeamMembersFromSelections(
+    selections,
     referenceMonday,
     allPersonnel,
     presencesByPerson,
@@ -106,16 +136,17 @@ export function buildWeeklySchedule(
 }
 
 export function buildMonthlySchedule(
-  teamSelection: string,
+  teamSelection: string | string[],
   year: number,
   month: number,
   allPersonnel: PersonnelRecord[],
   presencesByPerson: Record<string, PresenceMap>,
   shiftFilter: string | null = null
 ) {
+  const selections = parseTeamSelections(teamSelection);
   const referenceMonday = new Date(Date.UTC(year, month, 1, 12, 0, 0));
-  const teamMembers = getTeamMembersOptimized(
-    teamSelection,
+  const teamMembers = getTeamMembersFromSelections(
+    selections,
     referenceMonday,
     allPersonnel,
     presencesByPerson,
@@ -148,6 +179,6 @@ export function buildMonthlySchedule(
     }
   }
 
-  const teamName = teamSelection.replace(" (REAP)", "").replace(" (RP)", "");
+  const teamName = selections.length === 1 ? selections[0].replace(" (REAP)", "").replace(" (RP)", "") : "Fusion";
   return { teamName, monthDates, schedule, details, teamMembers, year, month };
 }
