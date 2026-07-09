@@ -149,6 +149,26 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
     setTimeout(() => exportCsv("capa"), 800);
   };
 
+  const importFromSheets = async () => {
+    setDataBusy(true);
+    try {
+      await saveConfigFields();
+      const res = await fetch("/api/admin/data/import/presences/url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webAppUrl: config?.sheetsWebAppUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Import depuis Sheets échoué");
+      flash(data.message ?? `${data.imported} présences importées`);
+      onClose();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Erreur import Sheets");
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
   const importGasJson = async (file: File) => {
     setDataBusy(true);
     try {
@@ -563,7 +583,22 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
                     if (file) void importCsv(file, csvImportType);
                   }}
                 />
-                <div className="border-t pt-3 mt-3">
+                <div className="border-t pt-3 mt-3 space-y-3">
+                  <div>
+                    <p className="text-[11px] font-bold text-slate-600 mb-2">Import depuis Google Sheets (URL)</p>
+                    <p className="text-[10px] text-slate-500 mb-2">
+                      Récupère les présences via le lien de synchronisation GAS (Paramètres ou mode Google Sheets).
+                    </p>
+                    <button
+                      type="button"
+                      disabled={dataBusy || !config?.sheetsWebAppUrl?.trim()}
+                      onClick={() => void importFromSheets()}
+                      className="w-full px-4 py-2 rounded-xl bg-[#00b5e2] text-white text-sm font-bold disabled:opacity-50"
+                    >
+                      Importer depuis Google Sheets
+                    </button>
+                  </div>
+                  <div>
                   <p className="text-[11px] font-bold text-slate-600 mb-2">Import export GAS (JSON)</p>
                   <p className="text-[10px] text-slate-500 mb-2">Fichier généré par exportPresencesJson dans l&apos;ancienne application.</p>
                   <button
@@ -584,6 +619,7 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
                       if (file) void importGasJson(file);
                     }}
                   />
+                  </div>
                 </div>
                 <details className="text-[10px] text-slate-400">
                   <summary className="cursor-pointer font-bold text-slate-500">Sauvegarde technique (JSON)</summary>

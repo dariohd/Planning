@@ -3,14 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AppMode, DayPresence, PersonnelRecord, WeeklySchedule } from "@/lib/types";
 import { computeIndividualCounters } from "@/lib/counters";
-import { ALL_STATUSES, DISPLAY_POSTES } from "@/lib/constants";
-import { TeamMonthlyTable } from "@/components/desktop/TeamMonthlyTable";
-import { TeamFilterDropdown } from "@/components/desktop/TeamFilterDropdown";
+import { DISPLAY_POSTES } from "@/lib/constants";
 import { usePlanningFilters } from "@/lib/usePlanningFilters";
-import { canModifyPerson, canUserEdit, isAdministrator } from "@/lib/client-permissions";
+import { canUserEdit, isAdministrator } from "@/lib/client-permissions";
 import { getMondayOfWeek } from "@/lib/shifts";
 import { fullName } from "@/lib/personnel";
-import { StatusCell } from "@/components/shared/StatusCell";
 import { PresenceEditor } from "@/components/shared/PresenceEditor";
 import { IndicatorsView } from "@/components/desktop/IndicatorsView";
 import { CapaView } from "@/components/desktop/CapaView";
@@ -19,7 +16,8 @@ import { PersonnelForm } from "@/components/desktop/PersonnelForm";
 import { SettingsModal } from "@/components/desktop/SettingsModal";
 import { DesktopHeader } from "@/components/desktop/DesktopHeader";
 import { ManagerGuideBanner } from "@/components/desktop/ManagerGuideBanner";
-import { EmptyTeamState } from "@/components/desktop/EmptyTeamState";
+import { TeamViewSection } from "@/components/desktop/TeamViewSection";
+import { IndividualViewSection } from "@/components/desktop/IndividualViewSection";
 import { useDesktopData } from "@/hooks/useDesktopData";
 import { t, type Lang } from "@/lib/i18n";
 import { HelpChatbot } from "@/components/shared/HelpChatbot";
@@ -435,272 +433,73 @@ export default function DesktopApp() {
 
       <main className="p-6 max-w-[1600px] mx-auto">
         {view === "equipe" && (
-          <section className="glass rounded-3xl p-6">
-            <div className="flex flex-wrap gap-3 items-center mb-6">
-              <TeamFilterDropdown options={teamOptions} selected={teamSelections} onChange={(v) => patchFilters({ teamSelections: v })} />
-              <select value={shiftFilter} onChange={(e) => patchFilters({ shiftFilter: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
-                {["Tous", "M", "A", "N", "J"].map((s) => (
-                  <option key={s} value={s}>Quart {s}</option>
-                ))}
-              </select>
-              <select value={workstationFilter} onChange={(e) => patchFilters({ workstationFilter: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
-                <option value="Tous">Poste Tous</option>
-                {(appConfig.workstations ?? DISPLAY_POSTES).map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <div className="flex rounded-xl border overflow-hidden text-sm font-bold">
-                <button type="button" className={`px-3 py-2 ${teamPeriod === "month" ? "bg-[#00205b] text-white" : "bg-white"}`} onClick={() => patchFilters({ teamPeriod: "month" })}>Mois</button>
-                <button type="button" className={`px-3 py-2 ${teamPeriod === "week" ? "bg-[#00205b] text-white" : "bg-white"}`} onClick={() => patchFilters({ teamPeriod: "week" })}>Semaine</button>
-              </div>
-              <button type="button" onClick={openPrint} className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-[#00205b] text-[#00205b]">{t(lang, "print")}</button>
-              {canEdit && (
-                <button type="button" onClick={() => setMassOpen(true)} className="px-4 py-2 rounded-xl text-sm font-bold bg-[#00b5e2] text-white">Modification groupée</button>
-              )}
-              <div className="flex items-center gap-2 ml-auto">
-                <button type="button" onClick={() => (teamPeriod === "week" ? shiftWeek(-1) : shiftMonth(-1))} className="px-3 py-2 rounded-lg bg-white border">←</button>
-                <span className="text-sm font-bold">
-                  {teamPeriod === "week"
-                    ? `${t(lang, "week_of")} ${weekly?.weekDates?.[0]} ${t(lang, "to")} ${weekly?.weekDates?.[6]}`
-                    : `${calendarMonth.month + 1}/${calendarMonth.year}`}
-                </span>
-                <button type="button" onClick={() => (teamPeriod === "week" ? shiftWeek(1) : shiftMonth(1))} className="px-3 py-2 rounded-lg bg-white border">→</button>
-              </div>
-            </div>
-
-            {!hasTeamPresences ? (
-              <EmptyTeamState
-                lang={lang}
-                isAdmin={isAdmin}
-                onOpenSettings={() => setSettingsOpen(true)}
-                onGenerateYear={() => generateYear(calendarMonth.year)}
-              />
-            ) : teamPeriod === "month" && monthly ? (
-              <TeamMonthlyTable
-                monthDates={monthly.monthDates}
-                schedule={monthly.schedule}
-                details={monthly.details}
-                teamMembers={monthly.teamMembers}
-                allPersonnel={data.personnel}
-                userRole={userRole}
-                userName={data.currentUser.name}
-                userPersonnelId={data.currentUser.personnelId}
-                groupByPoste={appConfig.groupByMachine}
-                workstationFilter={workstationFilter}
-                holidayCountry={appConfig.holidayCountry ?? "FR"}
-                onCellClick={openCellEditor}
-              />
-            ) : (
-            <div className="overflow-x-auto rounded-2xl border border-slate-300">
-              <table className="w-full border-collapse text-sm min-w-[900px]">
-                <thead>
-                  <tr className="bg-slate-100">
-                    <th className="border border-slate-300 p-2 text-left w-[20%] sticky left-0 bg-slate-100 z-10">Personnel</th>
-                    {weekly?.weekDates?.map((d) => (
-                      <th key={d} className="border border-slate-300 p-1 text-center text-xs min-w-[32px]">{d.slice(8)}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {weekly?.teamMembers?.map((member) => {
-                    const canEditCell = canModifyPerson(userRole, data.currentUser.name, data.currentUser.personnelId, member, data.personnel);
-                    return (
-                    <tr key={member.id} className={member.role === "Intérimaire" ? "bg-cyan-50" : ""}>
-                      <td className="border border-slate-300 p-2 sticky left-0 bg-white z-10">
-                        <div className="font-bold text-xs">{member.nom} {member.prenom}</div>
-                        <div className="text-[10px] text-slate-500">{member.posteDeTravail}</div>
-                      </td>
-                      {weekly.weekDates.map((date) => {
-                        const status = weekly.schedule[member.id]?.[date] ?? "";
-                        const cellDetails = weekly.details?.[member.id]?.[date];
-                        return (
-                          <StatusCell
-                            key={date}
-                            status={status}
-                            details={cellDetails}
-                            className={`text-[10px] p-0.5 ${!canEditCell ? "opacity-60" : ""}`}
-                            onClick={canEditCell ? () => openCellEditor(member.id, date, status, cellDetails) : undefined}
-                          />
-                        );
-                      })}
-                    </tr>
-                  );})}
-                </tbody>
-              </table>
-            </div>
-            )}
-          </section>
+          <TeamViewSection
+            lang={lang}
+            data={data}
+            teamOptions={teamOptions}
+            teamSelections={teamSelections}
+            shiftFilter={shiftFilter}
+            workstationFilter={workstationFilter}
+            teamPeriod={teamPeriod}
+            workstations={appConfig.workstations}
+            groupByMachine={appConfig.groupByMachine}
+            holidayCountry={appConfig.holidayCountry}
+            userRole={userRole}
+            canEdit={canEdit}
+            isAdmin={isAdmin}
+            hasTeamPresences={hasTeamPresences}
+            weekly={weekly}
+            monthly={monthly}
+            calendarMonth={calendarMonth}
+            onFilterChange={patchFilters}
+            onPrint={openPrint}
+            onMassOpen={() => setMassOpen(true)}
+            onShiftWeek={shiftWeek}
+            onShiftMonth={shiftMonth}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onGenerateYear={() => generateYear(calendarMonth.year)}
+            onCellClick={openCellEditor}
+          />
         )}
 
         {view === "individuelle" && (
-          <section className="grid lg:grid-cols-12 gap-6">
-            <aside className="lg:col-span-4 glass rounded-3xl p-4 max-h-[80vh] overflow-y-auto">
-              <div className="flex flex-wrap gap-2 mb-3">
-                <button type="button" onClick={() => setShowArchived(!showArchived)} className={`text-xs font-bold px-2 py-1 rounded-lg border ${showArchived ? "bg-slate-200" : ""}`}>
-                  {showArchived ? "Archivés" : "Actifs"}
-                </button>
-                {isAdmin && canEdit && (
-                  <button type="button" onClick={() => { setSelectedPerson(null); setPersonFormOpen(true); }} className="text-xs font-bold px-2 py-1 rounded-lg bg-[#00205b] text-white">
-                    + Personne
-                  </button>
-                )}
-              </div>
-              <select value={reapFilter} onChange={(e) => setReapFilter(e.target.value)} className="w-full mb-2 rounded-xl border px-3 py-2 text-sm">
-                <option value="Tous">Tous les REAP</option>
-                {data.reapListForForm.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-              <div className="flex flex-wrap gap-1 mb-3">
-                <button type="button" onClick={() => setRoleFilter("Tous")} className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${roleFilter === "Tous" ? "bg-[#00205b] text-white" : ""}`}>Tous</button>
-                {[...new Set(data.personnel.map((p) => p.role))].sort().map((r) => (
-                  <button key={r} type="button" onClick={() => setRoleFilter(r)} className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${roleFilter === r ? "bg-[#00205b] text-white" : ""}`}>{r}</button>
-                ))}
-              </div>
-              <select value={sortPersonnel} onChange={(e) => patchFilters({ sortPersonnel: e.target.value })} className="w-full mb-3 rounded-xl border px-3 py-2 text-sm">
-                <option value="nom">Tri par nom</option>
-                <option value="role">Tri par rôle</option>
-              </select>
-              <input
-                placeholder={t(lang, "search")}
-                className="w-full mb-3 rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                onChange={(e) => {
-                  const q = e.target.value.toLowerCase();
-                  document.querySelectorAll("[data-person-item]").forEach((node) => {
-                    const text = (node as HTMLElement).dataset.search ?? "";
-                    (node as HTMLElement).style.display = text.includes(q) ? "" : "none";
-                  });
-                }}
-              />
-              <ul className="space-y-2">
-                {filteredPersonnel.map((p) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      data-person-item
-                      data-search={`${p.nom} ${p.prenom}`.toLowerCase()}
-                      onClick={() => setSelectedPerson(p)}
-                      className={`w-full text-left p-3 rounded-2xl border transition ${selectedPerson?.id === p.id ? "border-[#00b5e2] bg-white shadow" : "border-transparent hover:bg-white/70"}`}
-                    >
-                      <div className="font-bold text-sm">{p.nom} {p.prenom}</div>
-                      <div className="text-xs text-slate-500">{p.role} — {p.section}</div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </aside>
-
-            <div className="lg:col-span-8 glass rounded-3xl p-6">
-              {!selectedPerson ? (
-                <p className="text-center text-slate-500 py-20">{t(lang, "select_person")}</p>
-              ) : (
-                <>
-                  <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
-                    <h2 className="text-2xl font-black uppercase italic text-[#00205b]">{fullName(selectedPerson)}</h2>
-                    <div className="flex flex-wrap gap-2">
-                      {canEdit && (
-                        <button type="button" onClick={() => setPersonFormOpen(true)} className="px-3 py-1 rounded-lg border text-xs font-bold">Modifier fiche</button>
-                      )}
-                      {isAdmin && selectedPerson.statut === "Archivé" && (
-                        <button type="button" onClick={reactivatePerson} className="px-3 py-1 rounded-lg border border-green-400 text-green-700 text-xs font-bold">Réactiver</button>
-                      )}
-                      {isAdmin && selectedPerson.statut !== "Archivé" && (
-                        <button type="button" onClick={archivePerson} className="px-3 py-1 rounded-lg border border-red-300 text-red-700 text-xs font-bold">Archiver</button>
-                      )}
-                      <button type="button" className="px-3 py-1 rounded-lg border" onClick={() => setCalendarMonth((m) => { const d = new Date(Date.UTC(m.year, m.month - 1, 1)); return { year: d.getUTCFullYear(), month: d.getUTCMonth() }; })}>←</button>
-                      <span className="font-bold text-sm px-2">{calendarMonth.month + 1}/{calendarMonth.year}</span>
-                      <button type="button" className="px-3 py-1 rounded-lg border" onClick={() => setCalendarMonth((m) => { const d = new Date(Date.UTC(m.year, m.month + 1, 1)); return { year: d.getUTCFullYear(), month: d.getUTCMonth() }; })}>→</button>
-                      <button type="button" onClick={() => patchFilters({ showAnnual: !showAnnual })} className={`px-3 py-1 rounded-lg border text-xs font-bold ${showAnnual ? "bg-[#00205b] text-white" : ""}`}>Année</button>
-                    </div>
-                  </div>
-
-                  {individualCounters && (
-                    <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-6">
-                      {[
-                        { label: "CP", value: individualCounters.cp },
-                        { label: "JRTT", value: individualCounters.jrtt },
-                        { label: "Maladie", value: individualCounters.maladie },
-                        { label: "Formation", value: individualCounters.formation },
-                        { label: "Présence", value: individualCounters.presence },
-                        { label: "Hors prod.", value: individualCounters.horsProd },
-                      ].map((c) => (
-                        <div key={c.label} className="bg-white/70 rounded-xl p-2 text-center border">
-                          <div className="text-lg font-black text-[#00205b]">{c.value}</div>
-                          <div className="text-[10px] font-bold text-slate-500 uppercase">{c.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {canEdit && (
-                    <div className="mb-6 p-4 rounded-2xl bg-white/60 border border-slate-200">
-                      <p className="text-xs font-bold text-slate-500 mb-2">Appliquer une plage</p>
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} className="rounded-lg border px-2 py-1 text-sm" />
-                        <span className="text-slate-400">→</span>
-                        <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} className="rounded-lg border px-2 py-1 text-sm" />
-                        <select value={rangeStatus} onChange={(e) => setRangeStatus(e.target.value)} className="rounded-lg border px-2 py-1 text-sm">
-                          {ALL_STATUSES.filter(Boolean).map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                        <button type="button" onClick={applyRange} className="px-3 py-1 rounded-lg bg-[#00205b] text-white text-sm font-bold">Appliquer</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {!showAnnual ? (
-                  <>
-                  <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-500 mb-2">
-                    {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => <div key={d}>{d}</div>)}
-                  </div>
-                  <div className="grid grid-cols-7 gap-2">
-                    {Array.from({ length: daysInMonth.startPad }).map((_, i) => <div key={`pad-${i}`} />)}
-                    {Array.from({ length: daysInMonth.count }).map((_, i) => {
-                      const day = i + 1;
-                      const dateKey = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                      const pres = yearPresences[dateKey];
-                      const status = pres?.s ?? "";
-                      return (
-                        <button
-                          key={day}
-                          type="button"
-                          className={`relative aspect-square rounded-full flex flex-col items-center justify-center text-xs font-bold hover:bg-slate-100 ${status ? "ring-2 ring-[#00b5e2]" : ""}`}
-                          onClick={() => openCellEditor(selectedPerson.id, dateKey, status, pres)}
-                        >
-                          <span>{day}</span>
-                          {status && <span className="text-[9px] text-[#00205b]">{status}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  </>
-                  ) : (
-                  <div className="grid md:grid-cols-3 gap-4">
-                    {Array.from({ length: 12 }, (_, mi) => {
-                      const month = mi;
-                      const count = new Date(Date.UTC(calendarMonth.year, month + 1, 0)).getUTCDate();
-                      const first = new Date(Date.UTC(calendarMonth.year, month, 1));
-                      const pad = (first.getUTCDay() + 6) % 7;
-                      return (
-                        <div key={month} className="bg-white/60 rounded-2xl p-3 border">
-                          <p className="text-xs font-black text-[#00205b] mb-2">{month + 1}/{calendarMonth.year}</p>
-                          <div className="grid grid-cols-7 gap-0.5 text-[8px]">
-                            {Array.from({ length: pad }).map((_, i) => <div key={`p-${i}`} />)}
-                            {Array.from({ length: count }, (_, d) => {
-                              const day = d + 1;
-                              const dateKey = `${calendarMonth.year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                              const status = yearPresences[dateKey]?.s ?? "";
-                              return (
-                                <button key={day} type="button" onClick={() => openCellEditor(selectedPerson!.id, dateKey, status, yearPresences[dateKey])} className={`aspect-square rounded text-center ${status ? "bg-[#00b5e2]/30 font-bold" : "hover:bg-slate-100"}`}>
-                                  {day}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  )}
-                </>
-              )}
-            </div>
-          </section>
+          <IndividualViewSection
+            lang={lang}
+            data={data}
+            filteredPersonnel={filteredPersonnel}
+            selectedPerson={selectedPerson}
+            showArchived={showArchived}
+            roleFilter={roleFilter}
+            reapFilter={reapFilter}
+            sortPersonnel={sortPersonnel}
+            calendarMonth={calendarMonth}
+            showAnnual={showAnnual}
+            yearPresences={yearPresences}
+            daysInMonth={daysInMonth}
+            individualCounters={individualCounters}
+            canEdit={canEdit}
+            isAdmin={isAdmin}
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+            rangeStatus={rangeStatus}
+            onShowArchivedToggle={() => setShowArchived(!showArchived)}
+            onAddPerson={() => { setSelectedPerson(null); setPersonFormOpen(true); }}
+            onReapFilter={setReapFilter}
+            onRoleFilter={setRoleFilter}
+            onSortChange={(v) => patchFilters({ sortPersonnel: v })}
+            onSelectPerson={setSelectedPerson}
+            onEditPerson={() => setPersonFormOpen(true)}
+            onArchive={archivePerson}
+            onReactivate={reactivatePerson}
+            onMonthPrev={() => setCalendarMonth((m) => { const d = new Date(Date.UTC(m.year, m.month - 1, 1)); return { year: d.getUTCFullYear(), month: d.getUTCMonth() }; })}
+            onMonthNext={() => setCalendarMonth((m) => { const d = new Date(Date.UTC(m.year, m.month + 1, 1)); return { year: d.getUTCFullYear(), month: d.getUTCMonth() }; })}
+            onToggleAnnual={() => patchFilters({ showAnnual: !showAnnual })}
+            onRangeStart={setRangeStart}
+            onRangeEnd={setRangeEnd}
+            onRangeStatus={setRangeStatus}
+            onApplyRange={applyRange}
+            onCellClick={openCellEditor}
+          />
         )}
 
         {view === "indicateurs" && <IndicatorsView key={indicatorDate} mode={mode} selection={selectionParam} date={indicatorDate} teamOptions={teamOptions} />}

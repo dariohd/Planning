@@ -1,7 +1,40 @@
 export type Lang = "fr" | "en" | "pt";
 
+const sharedStatusKeys = {
+  status_M: { fr: "Matin", en: "Morning", pt: "Manhã" },
+  status_A: { fr: "Après-midi", en: "Afternoon", pt: "Tarde" },
+  status_N: { fr: "Nuit", en: "Night", pt: "Noite" },
+  status_J: { fr: "Jour", en: "Day", pt: "Dia" },
+  status_CP: { fr: "Congés payés", en: "Paid leave", pt: "Férias" },
+  status_4HCP: { fr: "½ journée CP", en: "½ day leave", pt: "½ dia férias" },
+  status_JRTT: { fr: "RTT", en: "RTT", pt: "RTT" },
+  status_Abs: { fr: "Absence", en: "Absent", pt: "Ausência" },
+  status_RF: { fr: "Repos férié", en: "Public holiday", pt: "Feriado" },
+  status_Ma: { fr: "Maladie", en: "Sick leave", pt: "Doença" },
+  status_LMa: { fr: "Longue maladie", en: "Long sick leave", pt: "Baixa longa" },
+  status_F: { fr: "Formation", en: "Training", pt: "Formação" },
+  status_4HF: { fr: "½ journée formation", en: "½ day training", pt: "½ dia formação" },
+  status_P: { fr: "Présent", en: "Present", pt: "Presente" },
+  status_Z: { fr: "Zoom", en: "Zoom", pt: "Zoom" },
+  status_S: { fr: "Sans solde", en: "Unpaid", pt: "Sem vencimento" },
+  status_D: { fr: "Déplacement", en: "Travel", pt: "Deslocação" },
+  status_Ecole: { fr: "École", en: "School", pt: "Escola" },
+  status_CET: { fr: "CET", en: "CET", pt: "CET" },
+  status_Mi: { fr: "Mission", en: "Assignment", pt: "Missão" },
+  status_EM: { fr: "EM", en: "EM", pt: "EM" },
+  status_SC: { fr: "SC", en: "SC", pt: "SC" },
+  status_SL: { fr: "SL", en: "SL", pt: "SL" },
+} as const;
+
+function buildLang(extra: Record<string, string>, lang: Lang): Record<string, string> {
+  const statusEntries = Object.fromEntries(
+    Object.entries(sharedStatusKeys).map(([k, v]) => [k, v[lang]])
+  );
+  return { ...extra, ...statusEntries };
+}
+
 const dict: Record<Lang, Record<string, string>> = {
-  fr: {
+  fr: buildLang({
     planning: "Planning Présence",
     team: "Équipe",
     individual: "Individuel",
@@ -28,6 +61,22 @@ const dict: Record<Lang, Record<string, string>> = {
     month: "Mois",
     week: "Semaine",
     mass_update: "Modification groupée",
+    shift: "Quart",
+    workstation_all: "Poste Tous",
+    personnel: "Personnel",
+    archived: "Archivés",
+    active: "Actifs",
+    add_person: "+ Personne",
+    all_reap: "Tous les REAP",
+    sort_name: "Tri par nom",
+    sort_role: "Tri par rôle",
+    edit_profile: "Modifier fiche",
+    reactivate: "Réactiver",
+    archive: "Archiver",
+    year_view: "Année",
+    apply_range: "Appliquer une plage",
+    apply: "Appliquer",
+    import_from_sheets: "Importer depuis Google Sheets",
     guide_title: "Premiers pas",
     guide_step_team: "Vue Équipe : consultez et modifiez les présences du mois ou de la semaine.",
     guide_step_individual: "Vue Individuelle : calendrier, compteurs CP et saisie par plage.",
@@ -38,8 +87,21 @@ const dict: Record<Lang, Record<string, string>> = {
     empty_team_body: "Générez les plannings de l'année ou importez les présences depuis l'ancienne application.",
     empty_team_import: "Importer des données",
     loading: "Chargement...",
-  },
-  en: {
+    counter_cp: "CP",
+    counter_jrtt: "JRTT",
+    counter_maladie: "Maladie",
+    counter_formation: "Formation",
+    counter_presence: "Présence",
+    counter_hors_prod: "Hors prod.",
+    weekday_1: "Lun",
+    weekday_2: "Mar",
+    weekday_3: "Mer",
+    weekday_4: "Jeu",
+    weekday_5: "Ven",
+    weekday_6: "Sam",
+    weekday_0: "Dim",
+  }, "fr"),
+  en: buildLang({
     planning: "Attendance Planning",
     team: "Team",
     individual: "Individual",
@@ -66,6 +128,22 @@ const dict: Record<Lang, Record<string, string>> = {
     month: "Month",
     week: "Week",
     mass_update: "Mass update",
+    shift: "Shift",
+    workstation_all: "All workstations",
+    personnel: "Staff",
+    archived: "Archived",
+    active: "Active",
+    add_person: "+ Person",
+    all_reap: "All team leads",
+    sort_name: "Sort by name",
+    sort_role: "Sort by role",
+    edit_profile: "Edit profile",
+    reactivate: "Reactivate",
+    archive: "Archive",
+    year_view: "Year",
+    apply_range: "Apply date range",
+    apply: "Apply",
+    import_from_sheets: "Import from Google Sheets",
     guide_title: "Getting started",
     guide_step_team: "Team view: browse and edit monthly or weekly attendance.",
     guide_step_individual: "Individual view: calendar, leave counters and date ranges.",
@@ -76,8 +154,21 @@ const dict: Record<Lang, Record<string, string>> = {
     empty_team_body: "Generate yearly schedules or import attendance from the legacy app.",
     empty_team_import: "Import data",
     loading: "Loading...",
-  },
-  pt: {
+    counter_cp: "Leave",
+    counter_jrtt: "RTT",
+    counter_maladie: "Sick",
+    counter_formation: "Training",
+    counter_presence: "Present",
+    counter_hors_prod: "Off production",
+    weekday_1: "Mon",
+    weekday_2: "Tue",
+    weekday_3: "Wed",
+    weekday_4: "Thu",
+    weekday_5: "Fri",
+    weekday_6: "Sat",
+    weekday_0: "Sun",
+  }, "en"),
+  pt: buildLang({
     planning: "Planeamento",
     team: "Equipa",
     individual: "Individual",
@@ -104,6 +195,22 @@ const dict: Record<Lang, Record<string, string>> = {
     month: "Mês",
     week: "Semana",
     mass_update: "Atualização em massa",
+    shift: "Turno",
+    workstation_all: "Todos os postos",
+    personnel: "Pessoal",
+    archived: "Arquivados",
+    active: "Ativos",
+    add_person: "+ Pessoa",
+    all_reap: "Todos os REAP",
+    sort_name: "Ordenar por nome",
+    sort_role: "Ordenar por função",
+    edit_profile: "Editar ficha",
+    reactivate: "Reativar",
+    archive: "Arquivar",
+    year_view: "Ano",
+    apply_range: "Aplicar intervalo",
+    apply: "Aplicar",
+    import_from_sheets: "Importar do Google Sheets",
     guide_title: "Primeiros passos",
     guide_step_team: "Vista Equipa: consulte e edite presenças mensais ou semanais.",
     guide_step_individual: "Vista Individual: calendário, contadores e intervalos de datas.",
@@ -114,9 +221,34 @@ const dict: Record<Lang, Record<string, string>> = {
     empty_team_body: "Gere os planeamentos anuais ou importe presenças da app antiga.",
     empty_team_import: "Importar dados",
     loading: "A carregar...",
-  },
+    counter_cp: "Férias",
+    counter_jrtt: "RTT",
+    counter_maladie: "Doença",
+    counter_formation: "Formação",
+    counter_presence: "Presença",
+    counter_hors_prod: "Fora prod.",
+    weekday_1: "Seg",
+    weekday_2: "Ter",
+    weekday_3: "Qua",
+    weekday_4: "Qui",
+    weekday_5: "Sex",
+    weekday_6: "Sáb",
+    weekday_0: "Dom",
+  }, "pt"),
 };
 
 export function t(lang: Lang, key: string): string {
   return dict[lang][key] ?? dict.fr[key] ?? key;
+}
+
+export function statusLabel(lang: Lang, code: string): string {
+  return t(lang, `status_${code}`);
+}
+
+export function counterLabel(lang: Lang, key: string): string {
+  return t(lang, `counter_${key}`);
+}
+
+export function weekdayLabel(lang: Lang, day: number): string {
+  return t(lang, `weekday_${day}`);
 }
