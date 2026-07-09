@@ -76,6 +76,12 @@ export async function runSeed(): Promise<{ personnelCount: number }> {
     update: { role: "Administrateur" },
   });
 
+  await prisma.user.upsert({
+    where: { email: "darioh@tuta.io" },
+    create: { email: "darioh@tuta.io", role: "Administrateur", name: "Dario H" },
+    update: { role: "Administrateur" },
+  });
+
   await prisma.appConfig.upsert({
     where: { id: "default" },
     create: { id: "default", data: { appName: "Planning Présence" } },
