@@ -3,30 +3,55 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import type { Provider } from "next-auth/providers";
 import { authConfig } from "@/auth.config";
+import { isDemoLoginConfigured, safeEqual } from "@/lib/demo-auth";
 import { prisma } from "@/lib/db";
 import { nameFromEmail } from "@/lib/permissions";
 
 const providers: Provider[] = [
   Credentials({
-    name: "Dev",
+    id: "demo",
+    name: "Compte démo",
     credentials: {
-      email: { label: "Email", type: "email" },
+      username: { label: "Identifiant", type: "text" },
+      password: { label: "Mot de passe", type: "password" },
     },
     async authorize(credentials) {
-      if (process.env.NODE_ENV === "production" && !process.env.ALLOW_DEV_LOGIN) {
-        return null;
+      const username = String(credentials?.username ?? "").trim();
+      const password = String(credentials?.password ?? "");
+
+      if (!username || !password) return null;
+
+      const demoUsername = process.env.DEMO_USERNAME;
+      const demoPassword = process.env.DEMO_PASSWORD;
+
+      if (demoUsername && demoPassword && safeEqual(username, demoUsername) && safeEqual(password, demoPassword)) {
+        const email = (process.env.DEMO_USER_EMAIL ?? `${username.toLowerCase()}@demo.planning.local`).toLowerCase();
+        const role = process.env.DEMO_USER_ROLE ?? "Lecteur";
+        const user = await prisma.user.upsert({
+          where: { email },
+          create: { email, role, name: username },
+          update: { role, name: username },
+        });
+        return { id: user.id, email: user.email, name: user.name, role: user.role };
       }
-      const email = String(credentials?.email ?? process.env.DEV_USER_EMAIL ?? "admin@local.dev");
-      const user = await prisma.user.upsert({
-        where: { email: email.toLowerCase() },
-        create: {
-          email: email.toLowerCase(),
-          role: process.env.DEV_USER_ROLE ?? "Administrateur",
-          name: nameFromEmail(email),
-        },
-        update: {},
-      });
-      return { id: user.id, email: user.email, name: user.name, role: user.role };
+
+      if (process.env.NODE_ENV !== "production" || process.env.ALLOW_DEV_LOGIN === "true") {
+        const devEmail = (process.env.DEV_USER_EMAIL ?? "admin@local.dev").toLowerCase();
+        if (username === devEmail || username === "admin" || username === "admin@local.dev") {
+          const user = await prisma.user.upsert({
+            where: { email: devEmail },
+            create: {
+              email: devEmail,
+              role: process.env.DEV_USER_ROLE ?? "Administrateur",
+              name: nameFromEmail(devEmail),
+            },
+            update: {},
+          });
+          return { id: user.id, email: user.email, name: user.name, role: user.role };
+        }
+      }
+
+      return null;
     },
   }),
 ];
@@ -40,6 +65,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   );
 }
 
+export const demoLoginEnabled = isDemoLoginConfigured();
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers,
@@ -48,6 +75,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ...authConfig.callbacks,
     async signIn({ user, account }) {
       if (!user.email) return false;
+      if (account?.provider === "demo") return true;
+
       const email = user.email.toLowerCase();
       const dbUser = await prisma.user.findUnique({ where: { email } });
       if (!dbUser && account?.provider === "google") {
