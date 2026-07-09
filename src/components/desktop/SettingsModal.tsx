@@ -52,6 +52,7 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
   const [dataBusy, setDataBusy] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const importCsvRef = useRef<HTMLInputElement>(null);
+  const importGasRef = useRef<HTMLInputElement>(null);
   const [csvImportType, setCsvImportType] = useState<"personnel" | "presences" | "capa">("personnel");
   const [savedStorage, setSavedStorage] = useState<"database" | "google_sheets">("database");
   const [switchTarget, setSwitchTarget] = useState<"database" | "google_sheets" | null>(null);
@@ -146,6 +147,24 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
     exportCsv("personnel");
     setTimeout(() => exportCsv("presences"), 400);
     setTimeout(() => exportCsv("capa"), 800);
+  };
+
+  const importGasJson = async (file: File) => {
+    setDataBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/admin/data/import/presences", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Import GAS échoué");
+      flash(data.message ?? `${data.imported} présences importées`);
+      onClose();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Erreur import GAS");
+    } finally {
+      setDataBusy(false);
+      if (importGasRef.current) importGasRef.current.value = "";
+    }
   };
 
   const importCsv = async (file: File, type: "personnel" | "presences" | "capa") => {
@@ -544,6 +563,28 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
                     if (file) void importCsv(file, csvImportType);
                   }}
                 />
+                <div className="border-t pt-3 mt-3">
+                  <p className="text-[11px] font-bold text-slate-600 mb-2">Import export GAS (JSON)</p>
+                  <p className="text-[10px] text-slate-500 mb-2">Fichier généré par exportPresencesJson dans l&apos;ancienne application.</p>
+                  <button
+                    type="button"
+                    disabled={dataBusy}
+                    onClick={() => importGasRef.current?.click()}
+                    className="w-full px-4 py-2 rounded-xl border text-sm font-bold"
+                  >
+                    Choisir export-presences.json
+                  </button>
+                  <input
+                    ref={importGasRef}
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void importGasJson(file);
+                    }}
+                  />
+                </div>
                 <details className="text-[10px] text-slate-400">
                   <summary className="cursor-pointer font-bold text-slate-500">Sauvegarde technique (JSON)</summary>
                   <div className="flex gap-2 mt-2">

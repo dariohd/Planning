@@ -1,6 +1,7 @@
 import { execSync } from "child_process";
 import { prisma } from "../src/lib/db";
 import { runSeed } from "../src/lib/seed";
+import { linkDemoUser, maybeGenerateYearlySchedules } from "../src/lib/post-migrate";
 
 async function ensureAdmins() {
   await prisma.user.upsert({
@@ -29,6 +30,15 @@ async function main() {
     execSync("npx prisma db push", { stdio: "inherit" });
     await maybeSeed();
     await ensureAdmins();
+    await linkDemoUser().catch((e) => console.warn("Liaison compte démo ignorée:", e));
+
+    const scheduleResult = await maybeGenerateYearlySchedules();
+    if (scheduleResult) {
+      console.log(`Plannings générés : ${scheduleResult.created} créés, ${scheduleResult.skipped} ignorés.`);
+    } else {
+      console.log("Plannings année courante déjà présents ou pas de personnel — génération ignorée.");
+    }
+
     await prisma.$disconnect();
   } else {
     console.warn("DATABASE_URL absente — schéma non appliqué.");

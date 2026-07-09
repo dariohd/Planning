@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AppMode, DayPresence, InitialData, PersonnelRecord, WeeklySchedule } from "@/lib/types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { AppMode, DayPresence, PersonnelRecord, WeeklySchedule } from "@/lib/types";
 import { computeIndividualCounters } from "@/lib/counters";
 import { ALL_STATUSES, DISPLAY_POSTES } from "@/lib/constants";
 import { TeamMonthlyTable } from "@/components/desktop/TeamMonthlyTable";
@@ -17,11 +17,14 @@ import { CapaView } from "@/components/desktop/CapaView";
 import { MassUpdateModal } from "@/components/desktop/MassUpdateModal";
 import { PersonnelForm } from "@/components/desktop/PersonnelForm";
 import { SettingsModal } from "@/components/desktop/SettingsModal";
+import { DesktopHeader } from "@/components/desktop/DesktopHeader";
+import { ManagerGuideBanner } from "@/components/desktop/ManagerGuideBanner";
+import { EmptyTeamState } from "@/components/desktop/EmptyTeamState";
+import { useDesktopData } from "@/hooks/useDesktopData";
 import { t, type Lang } from "@/lib/i18n";
 import { HelpChatbot } from "@/components/shared/HelpChatbot";
 import { useToast } from "@/components/shared/ToastProvider";
 import { signOut, useSession } from "next-auth/react";
-import Link from "next/link";
 
 type View = "equipe" | "individuelle" | "indicateurs" | "capa";
 type TeamPeriod = "week" | "month";
@@ -68,12 +71,12 @@ export default function DesktopApp() {
     [setFilters]
   );
   const [view, setView] = useState<View>("equipe");
-  const [data, setData] = useState<InitialData | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const { data, loading, error, loadInitial, pollUpdates } = useDesktopData(mode, showArchived);
   const [weekStart, setWeekStart] = useState(getMondayOfWeek());
   const [weekly, setWeekly] = useState<WeeklySchedule | null>(null);
   const [monthly, setMonthly] = useState<MonthlyData | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<PersonnelRecord | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
   const [roleFilter, setRoleFilter] = useState("Tous");
   const [reapFilter, setReapFilter] = useState("Tous");
   const [yearPresences, setYearPresences] = useState<Record<string, DayPresence>>({});
@@ -81,8 +84,6 @@ export default function DesktopApp() {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() };
   });
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState<EditorState>(null);
   const [massOpen, setMassOpen] = useState(false);
   const [personFormOpen, setPersonFormOpen] = useState(false);
@@ -91,7 +92,6 @@ export default function DesktopApp() {
   const [rangeEnd, setRangeEnd] = useState("");
   const [rangeStatus, setRangeStatus] = useState("CP");
   const [adminMsg, setAdminMsg] = useState<string | null>(null);
-  const lastModifiedRef = useRef<string>("0");
 
   const userRole = data?.currentUser.role ?? "Non Autorisé";
   const canEdit = canUserEdit(userRole);
@@ -105,22 +105,6 @@ export default function DesktopApp() {
     }),
     [data]
   );
-
-  const loadInitial = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const archived = showArchived ? "&archived=true" : "";
-    const res = await fetch(`/api/initial-data?mode=${mode}${archived}`);
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json.error ?? "Erreur de chargement");
-      setData(null);
-    } else {
-      setData(json);
-      lastModifiedRef.current = String(json.lastModified ?? "0");
-    }
-    setLoading(false);
-  }, [mode, showArchived]);
 
   const selectionParam = teamSelections
     .map((s) => (s === "Non affectés 3×8" ? "__UNASSIGNED_3x8__" : s))
@@ -155,12 +139,6 @@ export default function DesktopApp() {
   }, [teamPeriod, loadWeekly, loadMonthly]);
 
   useEffect(() => {
-    // Chargement initial serveur
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch au montage
-    void loadInitial();
-  }, [loadInitial]);
-
-  useEffect(() => {
     if (view === "equipe" || view === "capa") {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch dépendant des filtres
       if (teamPeriod === "week") void loadWeekly();
@@ -176,19 +154,23 @@ export default function DesktopApp() {
   }, [selectedPerson, calendarMonth.year, loadPersonYear]);
 
   useEffect(() => {
-    const interval = setInterval(async () => {
-      const res = await fetch(`/api/updates?since=${lastModifiedRef.current}&mode=${mode}`);
-      const json = await res.json();
-      if (json.hasChanges && json.newData) {
-        setData(json.newData);
-        lastModifiedRef.current = String(json.lastModified);
+    const interval = setInterval(() => {
+      void pollUpdates(() => {
         if (view === "equipe") refreshTeam();
-      } else if (json.lastModified) {
-        lastModifiedRef.current = String(json.lastModified);
-      }
+      });
     }, 30000);
     return () => clearInterval(interval);
-  }, [mode, view, refreshTeam]);
+  }, [view, pollUpdates, refreshTeam]);
+
+  const hasTeamPresences = useMemo(() => {
+    if (monthly?.schedule) {
+      return Object.values(monthly.schedule).some((days) => Object.keys(days).length > 0);
+    }
+    if (weekly?.schedule) {
+      return Object.values(weekly.schedule).some((days) => Object.values(days).some(Boolean));
+    }
+    return true;
+  }, [monthly, weekly]);
 
   const teamOptions = useMemo(() => {
     if (!data) return ["Tous"];
@@ -364,7 +346,7 @@ export default function DesktopApp() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-[#00205b] font-bold">
-        Chargement...
+        {t(lang, "loading")}
       </div>
     );
   }
@@ -425,50 +407,27 @@ export default function DesktopApp() {
         onGenerateYear={generateYear}
       />
 
-      <header className="sticky top-0 z-20 glass border-b border-white/60 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black italic uppercase tracking-tight text-[#00205b]">
-            {data.settings.appName}
-          </h1>
-          <p className="text-xs text-slate-500">
-            {session?.user?.name} — {data.currentUser.role}
-            {!canEdit && " (lecture seule)"}
-          </p>
-        </div>
+      <DesktopHeader
+        appName={data.settings.appName}
+        userName={session?.user?.name}
+        userRole={data.currentUser.role}
+        canEdit={canEdit}
+        view={view}
+        lang={lang}
+        mode={mode}
+        isAdmin={isAdmin}
+        onViewChange={setView}
+        onSettingsOpen={() => setSettingsOpen(true)}
+        onLangChange={(l) => patchFilters({ lang: l })}
+        onModeToggle={() => patchFilters({ mode: mode === "production" ? "support" : "production" })}
+      />
 
-        <nav className="flex flex-wrap gap-2 items-center">
-          {(["equipe", "individuelle", "indicateurs", "capa"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              className={`nav-link px-4 py-2 rounded-xl text-sm font-bold ${view === v ? "bg-[#00205b] text-white" : ""}`}
-              aria-current={view === v ? "page" : undefined}
-              onClick={() => setView(v)}
-            >
-              {t(lang, v === "equipe" ? "team" : v === "individuelle" ? "individual" : v === "indicateurs" ? "indicators" : "capa")}
-            </button>
-          ))}
-          <Link href="/mobile" className="px-4 py-2 rounded-xl text-sm font-bold bg-[#00b5e2] text-white">
-            {t(lang, "mobile")}
-          </Link>
-          {isAdmin && (
-            <button type="button" onClick={() => setSettingsOpen(true)} className="px-3 py-2 rounded-xl border text-sm font-bold">
-              Paramètres
-            </button>
-          )}
-          <select value={lang} onChange={(e) => patchFilters({ lang: e.target.value })} className="rounded-xl border px-2 py-2 text-xs font-bold" aria-label="Langue">
-            <option value="fr">FR</option>
-            <option value="en">EN</option>
-            <option value="pt">PT</option>
-          </select>
-          <button type="button" onClick={() => patchFilters({ mode: mode === "production" ? "support" : "production" })} className="px-4 py-2 rounded-xl text-sm font-bold border border-[#00205b] text-[#00205b]">
-            {t(lang, mode)}
-          </button>
-          <button type="button" onClick={() => signOut()} className="px-3 py-2 text-sm text-slate-500">
-            {t(lang, "logout")}
-          </button>
-        </nav>
-      </header>
+      <ManagerGuideBanner
+        lang={lang}
+        isAdmin={isAdmin}
+        hasPresences={hasTeamPresences}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
 
       {adminMsg && (
         <div className="mx-6 mt-4 rounded-xl bg-[#00205b] text-white text-sm font-bold px-4 py-2 text-center">{adminMsg}</div>
@@ -507,7 +466,14 @@ export default function DesktopApp() {
               </div>
             </div>
 
-            {teamPeriod === "month" && monthly ? (
+            {!hasTeamPresences ? (
+              <EmptyTeamState
+                lang={lang}
+                isAdmin={isAdmin}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onGenerateYear={() => generateYear(calendarMonth.year)}
+              />
+            ) : teamPeriod === "month" && monthly ? (
               <TeamMonthlyTable
                 monthDates={monthly.monthDates}
                 schedule={monthly.schedule}

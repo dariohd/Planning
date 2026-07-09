@@ -16,6 +16,8 @@
     "import:presences": "tsx scripts/import-presences.ts",
     "post-migrate": "tsx scripts/post-migrate.ts",
     "generate:year": "tsx scripts/generate-year.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -45,6 +47,7 @@
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
     "tsx": "^4.23.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }
