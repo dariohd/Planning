@@ -5,11 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 
 type Props = {
+  credentialsFormEnabled: boolean;
   demoLoginEnabled: boolean;
   googleLoginEnabled: boolean;
 };
 
-function LoginForm({ demoLoginEnabled, googleLoginEnabled }: Props) {
+function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnabled }: Props) {
   const params = useSearchParams();
   const callbackUrl = params.get("callbackUrl") ?? "/desktop";
   const [username, setUsername] = useState("");
@@ -48,7 +49,7 @@ function LoginForm({ demoLoginEnabled, googleLoginEnabled }: Props) {
         <p className="text-sm text-slate-500 mb-8 text-center">Connexion requise</p>
 
         <div className="space-y-4">
-          {(demoLoginEnabled || process.env.NODE_ENV !== "production") && (
+          {credentialsFormEnabled && (
             <form onSubmit={handleDemoSubmit} className="space-y-3 text-left">
               <div>
                 <label htmlFor="username" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
@@ -92,7 +93,7 @@ function LoginForm({ demoLoginEnabled, googleLoginEnabled }: Props) {
 
           {googleLoginEnabled && (
             <>
-              {demoLoginEnabled && (
+              {credentialsFormEnabled && demoLoginEnabled && (
                 <div className="flex items-center gap-3 text-xs text-slate-400 uppercase tracking-widest">
                   <span className="h-px flex-1 bg-slate-200" />
                   ou

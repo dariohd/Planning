@@ -121,12 +121,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async jwt({ token, user }) {
       if (user?.email) {
-        const dbUser = await prisma.user.findUnique({ where: { email: user.email.toLowerCase() } });
-        token.role = dbUser?.role ?? (user as { role?: string }).role ?? "Non Autorisé";
         token.email = user.email;
+        const fallbackRole = (user as { role?: string }).role ?? "Non Autorisé";
+        try {
+          const dbUser = await prisma.user.findUnique({ where: { email: user.email.toLowerCase() } });
+          token.role = dbUser?.role ?? fallbackRole;
+        } catch {
+          token.role = fallbackRole;
+        }
       } else if (token.email) {
-        const dbUser = await prisma.user.findUnique({ where: { email: String(token.email).toLowerCase() } });
-        token.role = dbUser?.role ?? "Non Autorisé";
+        try {
+          const dbUser = await prisma.user.findUnique({ where: { email: String(token.email).toLowerCase() } });
+          if (dbUser?.role) token.role = dbUser.role;
+        } catch {
+          /* session refresh without DB — keep existing role */
+        }
       }
       return token;
     },

@@ -9,6 +9,32 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+      AUTH_SECRET: ci-test-secret-minimum-32-chars-long
+      DEMO_USERNAME: e2e-admin
+      DEMO_PASSWORD: e2e-test-pass-2026
+      DEMO_USER_ROLE: Administrateur
+      ALLOW_DEV_LOGIN: "true"
+      DEV_USER_EMAIL: admin@local.dev
+      DEV_USER_ROLE: Administrateur
+
     steps:
       - uses: actions/checkout@v4
 
@@ -24,16 +50,10 @@ jobs:
       - run: npm run test
 
       - name: Build
-        env:
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
-          AUTH_SECRET: ci-test-secret-minimum-32-chars-long
         run: npm run build
 
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
       - name: E2E tests
-        env:
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
-          AUTH_SECRET: ci-test-secret-minimum-32-chars-long
         run: npm run test:e2e

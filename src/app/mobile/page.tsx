@@ -6,10 +6,27 @@ import { STATUS_BG } from "@/lib/constants";
 import { canModifyPerson, canUserEdit } from "@/lib/client-permissions";
 import { getMondayOfWeek } from "@/lib/shifts";
 import { fullName } from "@/lib/personnel";
+import { t, type Lang } from "@/lib/i18n";
 import { MobilePresenceSheet } from "@/components/mobile/MobilePresenceSheet";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useToast } from "@/components/shared/ToastProvider";
+
+const MOBILE_FILTERS_KEY = "planning:desktop";
+
+function getMobileLang(): Lang {
+  if (typeof window === "undefined") return "fr";
+  try {
+    const raw = localStorage.getItem(MOBILE_FILTERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { lang?: string };
+      if (parsed.lang === "en" || parsed.lang === "pt" || parsed.lang === "fr") return parsed.lang;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "fr";
+}
 
 type Tab = "equipe" | "stats" | "capa" | "annual";
 
@@ -18,6 +35,7 @@ const WEEK_DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven"];
 
 export default function MobileApp() {
   const { showToast } = useToast();
+  const [lang] = useState<Lang>(() => getMobileLang());
   const [offline, setOffline] = useState(false);
   const [absDay, setAbsDay] = useState(0);
   const [annualMonth, setAnnualMonth] = useState<number | null>(null);
@@ -108,7 +126,7 @@ export default function MobileApp() {
       body: JSON.stringify({ personnelId: sheet.id, date: sheet.date, status: payload.status, comment: payload.comment, hs: payload.hs, location: payload.location }),
     });
     setSheet(null);
-    showToast("Présence enregistrée");
+    showToast(t(lang, "mobile_toast_saved"));
     load();
   };
 
@@ -118,7 +136,7 @@ export default function MobileApp() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ personnelId: personId, date, status }),
     });
-    showToast("Statut mis à jour");
+    showToast(t(lang, "mobile_toast_updated"));
     await load();
   };
 
@@ -139,7 +157,7 @@ export default function MobileApp() {
   return (
     <div className="h-[100dvh] flex flex-col bg-[#f4f7f9] text-[#00205b]">
       {offline && (
-        <div className="bg-amber-100 text-amber-900 text-center text-[10px] font-bold py-1">Mode hors-ligne (cache local)</div>
+        <div className="bg-amber-100 text-amber-900 text-center text-[10px] font-bold py-1" role="status">{t(lang, "mobile_offline")}</div>
       )}
       <MobilePresenceSheet
         open={!!sheet}
@@ -154,19 +172,19 @@ export default function MobileApp() {
       <header className="glass-nav px-4 py-3 border-b border-slate-200 flex justify-between items-center">
         <div>
           <h1 className="font-black text-lg italic">{data?.settings.appName ?? "Planning"}</h1>
-          <p className="text-[10px] text-slate-500">{data?.currentUser.role}{!canEdit && " · lecture seule"}</p>
+          <p className="text-[10px] text-slate-500">{data?.currentUser.role}{!canEdit && ` · ${t(lang, "read_only")}`}</p>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={() => setMode(mode === "production" ? "support" : "production")} className="text-xs font-bold px-2 py-1 rounded-lg border">{mode === "production" ? "Prod" : "Support"}</button>
-          <Link href="/desktop" className="text-xs font-bold px-3 py-2 rounded-xl bg-white border">Bureau</Link>
-          <button type="button" onClick={() => signOut()} className="text-xs text-slate-500 px-2">Sortir</button>
+          <button type="button" onClick={() => setMode(mode === "production" ? "support" : "production")} aria-label={mode === "production" ? t(lang, "production") : t(lang, "support")} className="text-xs font-bold px-2 py-1 rounded-lg border">{mode === "production" ? t(lang, "production").slice(0, 4) : t(lang, "support").slice(0, 7)}</button>
+          <Link href="/desktop" className="text-xs font-bold px-3 py-2 rounded-xl bg-white border">{t(lang, "mobile_desktop")}</Link>
+          <button type="button" onClick={() => signOut()} className="text-xs text-slate-500 px-2">{t(lang, "mobile_logout")}</button>
         </div>
       </header>
 
-      <div className="flex border-b border-slate-200 px-1 overflow-x-auto">
-        {(["equipe", "stats", "capa", "annual"] as const).map((t) => (
-          <button key={t} type="button" onClick={() => setTab(t)} className={`flex-1 min-w-[70px] py-2 text-[10px] font-black uppercase ${tab === t ? "text-[#00b5e2] border-b-2 border-[#00b5e2]" : "text-slate-400"}`}>
-            {t === "equipe" ? "Équipe" : t === "stats" ? "Stats" : t === "capa" ? "Capa" : "Année"}
+      <div className="flex border-b border-slate-200 px-1 overflow-x-auto" role="tablist" aria-label={data?.settings.appName ?? "Planning"}>
+        {(["equipe", "stats", "capa", "annual"] as const).map((tabKey) => (
+          <button key={tabKey} type="button" role="tab" aria-selected={tab === tabKey} onClick={() => setTab(tabKey)} className={`flex-1 min-w-[70px] py-2 text-[10px] font-black uppercase ${tab === tabKey ? "text-[#00b5e2] border-b-2 border-[#00b5e2]" : "text-slate-400"}`}>
+            {tabKey === "equipe" ? t(lang, "mobile_tab_team") : tabKey === "stats" ? t(lang, "mobile_tab_stats") : tabKey === "capa" ? t(lang, "mobile_tab_capa") : t(lang, "mobile_tab_annual")}
           </button>
         ))}
       </div>
@@ -174,15 +192,15 @@ export default function MobileApp() {
       {tab === "equipe" && (
         <>
           <div className="px-4 py-3 flex gap-2 overflow-x-auto items-center flex-wrap">
-            <select value={selection} onChange={(e) => setSelection(e.target.value)} className="rounded-xl border px-3 py-2 text-xs font-bold bg-white">
-              <option value="Tous">Tous</option>
+            <select value={selection} onChange={(e) => setSelection(e.target.value)} aria-label={t(lang, "team")} className="rounded-xl border px-3 py-2 text-xs font-bold bg-white">
+              <option value="Tous">{t(lang, "all")}</option>
               {data?.chefsEquipe.map((c) => <option key={c.name} value={`${c.name} (${c.role})`}>{c.name}</option>)}
             </select>
-            <select value={shiftFilter} onChange={(e) => setShiftFilter(e.target.value)} className="rounded-xl border px-2 py-2 text-xs font-bold bg-white">
+            <select value={shiftFilter} onChange={(e) => setShiftFilter(e.target.value)} aria-label={t(lang, "shift")} className="rounded-xl border px-2 py-2 text-xs font-bold bg-white">
               {["Tous", "M", "A", "N", "J"].map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button type="button" onClick={() => shiftWeek(-1)} className="px-3 rounded-xl bg-white border text-sm">←</button>
-            <button type="button" onClick={() => shiftWeek(1)} className="px-3 rounded-xl bg-white border text-sm">→</button>
+            <button type="button" onClick={() => shiftWeek(-1)} aria-label={t(lang, "mobile_prev_week")} className="px-3 rounded-xl bg-white border text-sm">←</button>
+            <button type="button" onClick={() => shiftWeek(1)} aria-label={t(lang, "mobile_next_week")} className="px-3 rounded-xl bg-white border text-sm">→</button>
           </div>
           <main className="flex-1 overflow-y-auto px-3 pb-6 space-y-3">
             {weekly?.teamMembers?.map((member) => (
@@ -221,7 +239,7 @@ export default function MobileApp() {
         <main className="flex-1 p-4 space-y-4 overflow-y-auto">
           <div className="bg-white rounded-3xl p-6 text-center">
             <div className="text-4xl font-black text-[#00b5e2]">{rate}%</div>
-            <div className="text-xs font-bold text-slate-500 uppercase mt-1">Taux de présence</div>
+            <div className="text-xs font-bold text-slate-500 uppercase mt-1">{t(lang, "mobile_presence_rate")}</div>
             <p className="text-sm mt-4 text-slate-600">{presentDay} / {total} présents</p>
           </div>
           <div className="flex gap-1 justify-center">
@@ -265,8 +283,8 @@ export default function MobileApp() {
 
       {tab === "annual" && (
         <main className="flex-1 p-4 overflow-y-auto space-y-4">
-          <select value={annualPerson ?? ""} onChange={(e) => setAnnualPerson(e.target.value || null)} className="w-full rounded-xl border px-3 py-2 text-sm font-bold">
-            <option value="">Choisir un collaborateur</option>
+          <select value={annualPerson ?? ""} onChange={(e) => setAnnualPerson(e.target.value || null)} aria-label={t(lang, "mobile_choose_member")} className="w-full rounded-xl border px-3 py-2 text-sm font-bold">
+            <option value="">{t(lang, "mobile_choose_member")}</option>
             {weekly?.teamMembers?.map((m) => <option key={m.id} value={m.id}>{fullName(m)}</option>)}
           </select>
           {annualPerson && (

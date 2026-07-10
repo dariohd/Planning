@@ -7,8 +7,6 @@ const PEER_PERMISSIONS: Record<string, string[]> = {
   MFT: ["MFT"],
 };
 
-const TEAM_MEMBER_ROLES = ["Compagnon", "Intérimaire", "Apprenti Atelier", "Pilote"];
-
 export function canUserEdit(role: string): boolean {
   return role !== "Lecteur" && role !== "Non Autorisé";
 }
@@ -57,10 +55,6 @@ export function canModifyPerson(
 
   const peers = PEER_PERMISSIONS[userRole];
   if (peers?.includes(target.role)) return true;
-
-  if (userRole === "REAP" && TEAM_MEMBER_ROLES.includes(target.role)) {
-    return true;
-  }
 
   return false;
 }

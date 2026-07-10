@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { DISPLAY_POSTES } from "@/lib/constants";
 import { LEGACY_SHEETS_IMPORT_ENABLED } from "@/lib/features";
+import { t, type Lang } from "@/lib/i18n";
 import { DeleteDataConfirmModal } from "./DeleteDataConfirmModal";
 import { StorageSwitchModal } from "./StorageSwitchModal";
 
 type Props = {
   open: boolean;
   isAdmin: boolean;
+  lang: Lang;
   onClose: () => void;
   onGenerateYear: (year: number) => void;
 };
@@ -36,7 +38,7 @@ type Config = {
 
 type Tab = "general" | "access" | "capa" | "postes" | "donnees" | "actions";
 
-export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props) {
+export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: Props) {
   const [tab, setTab] = useState<Tab>("general");
   const [config, setConfig] = useState<Config | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -92,11 +94,11 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
       }),
     });
     if (reapplyHolidays) {
-      flash("Réapplication des jours fériés...");
+      flash(t(lang, "settings_holidays_updating"));
       await fetch("/api/schedule/reapply-holidays", { method: "POST" });
-      flash("Jours fériés mis à jour");
+      flash(t(lang, "settings_holidays_updated"));
     } else {
-      flash("Paramètres enregistrés");
+      flash(t(lang, "settings_saved"));
     }
     if (!reapplyHolidays) onClose();
   };
@@ -323,7 +325,7 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
   const storageLabel =
     savedStorage === "google_sheets"
       ? "Google Sheets (référence) + base en ligne (affichage)"
-      : "Base en ligne";
+      : t(lang, "settings_storage_database");
 
   const storageBadgeClass =
     savedStorage === "google_sheets"
@@ -339,12 +341,12 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
 
   const tabs: Tab[] = ["general", "access", "capa", "postes", "donnees", "actions"];
   const tabLabels: Record<Tab, string> = {
-    general: "Général",
-    access: "Accès",
-    capa: "Capa",
-    postes: "Postes",
-    donnees: "Données",
-    actions: "Actions",
+    general: t(lang, "settings_tab_general"),
+    access: t(lang, "settings_tab_access"),
+    capa: t(lang, "settings_tab_capa"),
+    postes: t(lang, "settings_tab_postes"),
+    donnees: t(lang, "settings_tab_donnees"),
+    actions: t(lang, "settings_tab_actions"),
   };
   const allRoles = config.roles?.length ? config.roles : ["Administrateur", "REAP", "RP", "MFT", "Pilote", "Lecteur"];
 
@@ -367,34 +369,34 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
         onConfirm={handleStorageSwitch}
       />
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-        <div className="glass rounded-3xl p-5 max-w-xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-          <h3 className="font-black text-[#00205b] mb-4">Paramètres</h3>
-          {msg && <p className="text-xs font-bold text-[#00b5e2] mb-2">{msg}</p>}
-          <div className="flex flex-wrap gap-1 mb-4">
-            {tabs.map((t) => (
-              <button key={t} type="button" onClick={() => setTab(t)} className={`px-3 py-1 rounded-lg text-xs font-bold ${tab === t ? "bg-[#00205b] text-white" : "bg-white border"}`}>{tabLabels[t]}</button>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose} role="presentation">
+        <div className="glass rounded-3xl p-5 max-w-xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="settings-title">
+          <h3 id="settings-title" className="font-black text-[#00205b] mb-4">{t(lang, "settings_title")}</h3>
+          {msg && <p className="text-xs font-bold text-[#00b5e2] mb-2" role="status">{msg}</p>}
+          <div className="flex flex-wrap gap-1 mb-4" role="tablist" aria-label={t(lang, "settings_title")}>
+            {tabs.map((tb) => (
+              <button key={tb} type="button" role="tab" aria-selected={tab === tb} onClick={() => setTab(tb)} className={`px-3 py-1 rounded-lg text-xs font-bold ${tab === tb ? "bg-[#00205b] text-white" : "bg-white border"}`}>{tabLabels[tb]}</button>
             ))}
           </div>
 
           {tab === "general" && (
             <div className="space-y-3 mb-4">
-              <label className="block text-xs font-bold text-slate-500">Nom de l&apos;application
+              <label className="block text-xs font-bold text-slate-500">{t(lang, "settings_app_name")}
                 <input value={config.appName} onChange={(e) => setConfig((c) => c && ({ ...c, appName: e.target.value }))} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm font-normal" />
               </label>
-              <label className="block text-xs font-bold text-slate-500">Pays fériés
+              <label className="block text-xs font-bold text-slate-500">{t(lang, "settings_holiday_country")}
                 <select value={config.holidayCountry} onChange={(e) => setConfig((c) => c && ({ ...c, holidayCountry: e.target.value as "FR" | "PT" }))} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm">
-                  <option value="FR">France</option>
-                  <option value="PT">Portugal</option>
+                  <option value="FR">{t(lang, "settings_country_fr")}</option>
+                  <option value="PT">{t(lang, "settings_country_pt")}</option>
                 </select>
               </label>
               <label className="flex items-center gap-2 text-sm font-bold">
                 <input type="checkbox" checked={config.groupByMachine} onChange={(e) => setConfig((c) => c && ({ ...c, groupByMachine: e.target.checked }))} />
-                Grouper la vue équipe par poste
+                {t(lang, "settings_group_machine")}
               </label>
               <label className="flex items-center gap-2 text-sm font-bold">
                 <input type="checkbox" checked={config.enableSectors} onChange={(e) => setConfig((c) => c && ({ ...c, enableSectors: e.target.checked }))} />
-                Activer les secteurs personnalisés
+                {t(lang, "settings_sectors")}
               </label>
               <div>
                 <p className="text-xs font-bold text-slate-500 mb-1">Rôles personnalisés</p>
@@ -470,16 +472,16 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
           {tab === "donnees" && (
             <div className="space-y-4 mb-4">
               <div className="rounded-xl border border-[#00b5e2]/30 bg-[#00b5e2]/5 p-3">
-                <p className="text-sm font-bold text-[#00205b] mb-1">Gestion des données</p>
+                <p className="text-sm font-bold text-[#00205b] mb-1">{t(lang, "settings_data_title")}</p>
                 <p className="text-xs text-slate-600 leading-relaxed">
                   {LEGACY_SHEETS_IMPORT_ENABLED
                     ? "Choisissez où stocker vos données, puis utilisez les exports CSV pour sauvegarder ou transférer vers Excel."
-                    : "Sauvegardez et restaurez vos données via les exports CSV. L'application fonctionne en autonomie sur la base en ligne."}
+                    : t(lang, "settings_data_desc_autonomous")}
                 </p>
               </div>
 
               <div className={`rounded-xl border p-3 mb-2 ${storageBadgeClass}`}>
-                <p className="text-[10px] font-bold uppercase tracking-wide opacity-70">Mode actif</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide opacity-70">{t(lang, "settings_active_mode")}</p>
                 <p className="text-sm font-black">{storageLabel}</p>
               </div>
 
@@ -541,7 +543,7 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
               )}
 
               <div className="rounded-xl border p-3 space-y-3 bg-white">
-                <p className="text-xs font-bold text-slate-600">Exporter en CSV (Excel)</p>
+                <p className="text-xs font-bold text-slate-600">{t(lang, "settings_export_csv")}</p>
                 <p className="text-[11px] text-slate-500">
                   Fichiers compatibles Excel, point-virgule, encodage UTF-8. Ouvrez avec Excel ou Google Sheets.
                 </p>
@@ -554,7 +556,7 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
               </div>
 
               <div className="rounded-xl border p-3 space-y-3 bg-white">
-                <p className="text-xs font-bold text-slate-600">Importer un CSV</p>
+                <p className="text-xs font-bold text-slate-600">{t(lang, "settings_import_csv")}</p>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {(["personnel", "presences", "capa"] as const).map((t) => (
                     <button
@@ -632,7 +634,7 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
               </div>
 
               <div className="border-t border-red-200 pt-4">
-                <p className="text-xs font-bold text-red-700 mb-1">Zone sensible</p>
+                <p className="text-xs font-bold text-red-700 mb-1">{t(lang, "settings_delete_zone")}</p>
                 <p className="text-[11px] text-slate-500 mb-2">Réinitialise toute l&apos;application. Une exportation CSV vous sera proposée avant.</p>
                 <button
                   type="button"
@@ -649,13 +651,13 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
             <div className="space-y-4 mb-4">
               <div className="flex gap-2 items-center">
                 <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-xl border px-3 py-2 text-sm w-28" />
-                <button type="button" onClick={() => onGenerateYear(year)} className="px-4 py-2 rounded-xl bg-[#00b5e2] text-white text-sm font-bold">Générer plannings année</button>
+                <button type="button" onClick={() => onGenerateYear(year)} className="px-4 py-2 rounded-xl bg-[#00b5e2] text-white text-sm font-bold">{t(lang, "settings_generate_year")}</button>
               </div>
               <div className="flex gap-2 items-center">
                 <input type="number" value={archiveYear} onChange={(e) => setArchiveYear(Number(e.target.value))} className="rounded-xl border px-3 py-2 text-sm w-28" />
                 <button type="button" onClick={archiveSchedules} className="px-4 py-2 rounded-xl border border-red-300 text-red-700 text-sm font-bold">Archiver présences année</button>
               </div>
-              <button type="button" onClick={() => saveConfig(true)} className="w-full px-4 py-2 rounded-xl border text-sm font-bold">Réappliquer les jours fériés sur tous les plannings</button>
+              <button type="button" onClick={() => saveConfig(true)} className="w-full px-4 py-2 rounded-xl border text-sm font-bold">{t(lang, "settings_reapply_holidays")}</button>
               <div className="border-t pt-4">
                 <p className="text-xs font-bold text-slate-500 mb-2">Export personnel (CSV)</p>
                 <div className="flex flex-wrap gap-1 mb-2">
@@ -672,9 +674,9 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
           )}
 
           <div className="flex gap-2 justify-end">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border text-sm font-bold">Fermer</button>
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border text-sm font-bold">{t(lang, "settings_close")}</button>
             {tab !== "actions" && tab !== "access" && (
-              <button type="button" onClick={() => saveConfig(false)} className="px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold">Sauvegarder</button>
+              <button type="button" onClick={() => saveConfig(false)} className="px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold">{t(lang, "settings_save")}</button>
             )}
           </div>
         </div>

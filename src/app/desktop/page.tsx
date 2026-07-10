@@ -410,6 +410,7 @@ export default function DesktopApp() {
       <SettingsModal
         open={settingsOpen}
         isAdmin={isAdmin}
+        lang={lang}
         onClose={() => { setSettingsOpen(false); void loadInitial(); }}
         onGenerateYear={generateYear}
       />

@@ -67,7 +67,9 @@ L'archive d'origine (GAS) est figée dans `../PlanningGS`.
 - **Support** : RP, MFT, Préparateurs, Qualité, Apprentis
 
 ### i18n
-- Interface FR / EN / PT (navigation et libellés principaux)
+- Interface FR / EN / PT (navigation, guide, paramètres principaux, mobile)
+
+Guide utilisateur : [docs/GUIDE-UTILISATEUR.md](docs/GUIDE-UTILISATEUR.md)
 
 ## Démarrage local
 
@@ -138,7 +140,7 @@ src/components/   UI desktop, mobile, shared
 src/lib/          Logique métier (capa, indicateurs, plannings…)
 prisma/           Schéma PostgreSQL
 scripts/          setup-local, import-presences, post-migrate, vercel-build
-docs/             Guides migration données
+docs/             Guides migration et utilisateur
 _legacy-export/   Données d'origine GAS
 ```
 

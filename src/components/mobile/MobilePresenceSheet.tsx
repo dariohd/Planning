@@ -22,13 +22,16 @@ export function MobilePresenceSheet({ open, date, memberName, current, canEdit, 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose} role="presentation">
       <div
         className="bg-white rounded-t-3xl w-full p-5 max-h-[80vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="presence-sheet-title"
       >
         <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
-        <p className="font-black text-[#00205b]">{memberName}</p>
+        <p id="presence-sheet-title" className="font-black text-[#00205b]">{memberName}</p>
         <p className="text-xs text-slate-500 mb-4">{date}</p>
 
         <div className="grid grid-cols-4 gap-2 mb-4">
