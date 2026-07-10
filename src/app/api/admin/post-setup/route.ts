@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const webAppUrl = (body.webAppUrl as string) || process.env.GAS_WEB_APP_URL || "";
+  const spreadsheetId = body.sheetsSpreadsheetId as string | undefined;
   const yearFilter = body.year as string | undefined;
   const demoPersonnelName = body.demoPersonnelName as string | undefined;
 
@@ -32,12 +33,11 @@ export async function POST(req: NextRequest) {
     let importResult = null;
     const config = await getAppConfig();
     const url = webAppUrl || config.sheetsWebAppUrl;
-
-    if (url?.trim()) {
-      if (webAppUrl && webAppUrl !== config.sheetsWebAppUrl) {
-        await saveAppConfig({ ...config, sheetsWebAppUrl: webAppUrl });
-      }
-      importResult = await importPresencesFromGasUrl(url, { yearFilter });
+    const configPatch: Partial<typeof config> = {};
+    if (spreadsheetId?.trim()) configPatch.sheetsSpreadsheetId = spreadsheetId.trim();
+    if (webAppUrl?.trim()) configPatch.sheetsWebAppUrl = webAppUrl.trim();
+    if (Object.keys(configPatch).length) {
+      await saveAppConfig({ ...config, ...configPatch });
     }
 
     const stats = await getDatabaseStats();
