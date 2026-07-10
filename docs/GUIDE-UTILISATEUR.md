@@ -1,6 +1,9 @@
 # Guide utilisateur — Planning Présence
 
-**URL officielle :** https://planning-black-xi.vercel.app/login
+**URLs de production (équivalentes) :**
+
+- https://planning-black-xi.vercel.app/login
+- https://planning-dariohprojects.vercel.app/login
 
 ---
 
