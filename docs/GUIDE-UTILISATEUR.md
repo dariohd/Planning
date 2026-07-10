@@ -86,14 +86,46 @@ Bouton **Paramètres** dans l'en-tête :
 | **Accès** | Comptes de connexion et rôles app |
 | Capa | Objectifs par poste |
 | Postes | Liste des postes et missions |
-| Données | Export / import CSV, sauvegarde |
+| Données | Export / import CSV, liaison Google Sheets, sauvegarde |
 | Actions | Génération annuelle, archive, export personnel |
 
 ---
 
 ## Mobile
 
-Bouton **Mobile** : version téléphone, installable (PWA). Saisie rapide par swipe ou clic sur une cellule.
+Bouton **Passer au téléphone** (en-tête bureau) : interface simplifiée pour smartphone, installable (PWA). Saisie rapide par clic sur une cellule.
+
+Bouton **Passer au bureau** (en-tête mobile) : retour au planning complet.
+
+Le bouton indique **où aller**, pas l'interface actuelle.
+
+---
+
+## Liaison Google Sheets (admin)
+
+Pour les ateliers qui regroupent planning et autres données dans un tableur Google.
+
+### Prérequis
+
+1. Un classeur Google Sheets dédié à l'atelier
+2. Le script pont `docs/GOOGLE-SHEETS-BRIDGE.gs` déployé en **Application Web** (accès : toute personne disposant du lien)
+
+### Configuration
+
+1. **Paramètres** → **Données** → choisir **Google Sheets** → confirmer
+2. Coller l'**URL de la Web App** dans « Lien de synchronisation »
+3. **Vérifier la connexion**
+4. **Envoyer vers Sheets** (première copie)
+
+### Fonctionnement
+
+| Action | Quand |
+|--------|-------|
+| Push automatique | Chaque nuit (5 h) vers le classeur |
+| Envoyer vers Sheets | Manuel, à tout moment |
+| Récupérer depuis Sheets | Après modification du classeur à la main |
+
+L'application utilise la **base en ligne** pour l'affichage quotidien. Google Sheets sert de **référence / consolidation** pour l'atelier.
 
 ---
 
