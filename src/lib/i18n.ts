@@ -132,6 +132,8 @@ const dict: Record<Lang, Record<string, string>> = {
     settings_group_machine: "Grouper la vue équipe par poste",
     settings_sectors: "Activer les secteurs personnalisés",
     settings_data_title: "Gestion des données",
+    settings_data_desc:
+      "Choisissez votre mode de stockage ou liez un classeur Google Sheets si votre atelier centralise ses données sur un tableur. Les exports CSV restent disponibles pour Excel.",
     settings_data_desc_autonomous: "Sauvegardez et restaurez vos données via les exports CSV. L'application fonctionne en autonomie sur la base en ligne.",
     settings_active_mode: "Mode actif",
     settings_storage_database: "Base en ligne",
@@ -254,6 +256,8 @@ const dict: Record<Lang, Record<string, string>> = {
     settings_group_machine: "Group team view by workstation",
     settings_sectors: "Enable custom sectors",
     settings_data_title: "Data management",
+    settings_data_desc:
+      "Choose your storage mode or link a Google Sheets workbook if your site keeps master data in a spreadsheet. CSV exports remain available for Excel.",
     settings_data_desc_autonomous: "Back up and restore data via CSV exports. The app runs autonomously on the online database.",
     settings_active_mode: "Active mode",
     settings_storage_database: "Online database",
@@ -376,6 +380,8 @@ const dict: Record<Lang, Record<string, string>> = {
     settings_group_machine: "Agrupar vista equipa por posto",
     settings_sectors: "Ativar setores personalizados",
     settings_data_title: "Gestão de dados",
+    settings_data_desc:
+      "Escolha o modo de armazenamento ou ligue um Google Sheets se o seu atelier centraliza os dados numa folha. As exportações CSV continuam disponíveis para Excel.",
     settings_data_desc_autonomous: "Guarde e restaure dados via exportações CSV. A app funciona de forma autónoma na base online.",
     settings_active_mode: "Modo ativo",
     settings_storage_database: "Base online",

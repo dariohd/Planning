@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { DISPLAY_POSTES } from "@/lib/constants";
-import { LEGACY_SHEETS_IMPORT_ENABLED } from "@/lib/features";
+import { SHEETS_SYNC_ENABLED } from "@/lib/features";
 import { t, type Lang } from "@/lib/i18n";
 import { DeleteDataConfirmModal } from "./DeleteDataConfirmModal";
 import { StorageSwitchModal } from "./StorageSwitchModal";
@@ -474,8 +474,8 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
               <div className="rounded-xl border border-[#00b5e2]/30 bg-[#00b5e2]/5 p-3">
                 <p className="text-sm font-bold text-[#00205b] mb-1">{t(lang, "settings_data_title")}</p>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  {LEGACY_SHEETS_IMPORT_ENABLED
-                    ? "Choisissez où stocker vos données, puis utilisez les exports CSV pour sauvegarder ou transférer vers Excel."
+                  {SHEETS_SYNC_ENABLED
+                    ? t(lang, "settings_data_desc")
                     : t(lang, "settings_data_desc_autonomous")}
                 </p>
               </div>
@@ -485,7 +485,7 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
                 <p className="text-sm font-black">{storageLabel}</p>
               </div>
 
-              {LEGACY_SHEETS_IMPORT_ENABLED && (
+              {SHEETS_SYNC_ENABLED && (
               <>
               <div>
                 <p className="text-xs font-bold text-slate-600 mb-2">Changer de mode (1 clic + confirmation)</p>
@@ -587,7 +587,7 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
                     if (file) void importCsv(file, csvImportType);
                   }}
                 />
-                {LEGACY_SHEETS_IMPORT_ENABLED && (
+                {SHEETS_SYNC_ENABLED && (
                 <div className="border-t pt-3 mt-3 space-y-3">
                   <div>
                     <p className="text-[11px] font-bold text-slate-600 mb-2">Import depuis Google Sheets (URL)</p>
