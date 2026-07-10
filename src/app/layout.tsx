@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Providers } from "@/components/Providers";
+import { BulleWidget } from "@/components/BulleWidget";
 import "./globals.css";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://planning-black-xi.vercel.app";
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr">
       <body className="antialiased">
         <Providers>{children}</Providers>
+        <BulleWidget />
       </body>
     </html>
   );
