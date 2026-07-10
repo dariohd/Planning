@@ -3,26 +3,35 @@
 import { useEffect, useState } from "react";
 import { t, type Lang } from "@/lib/i18n";
 
-const STORAGE_KEY = "planning-manager-guide-dismissed";
+const STORAGE_KEY = "planning-onboarding-dismissed";
 
 type Props = {
   lang: Lang;
   isAdmin: boolean;
+  canEdit: boolean;
   hasPresences: boolean;
-  onOpenSettings: () => void;
+  onOpenGuide: () => void;
+  onOpenSettings?: () => void;
 };
 
-export function ManagerGuideBanner({ lang, isAdmin, hasPresences, onOpenSettings }: Props) {
+export function ManagerGuideBanner({
+  lang,
+  isAdmin,
+  canEdit,
+  hasPresences,
+  onOpenGuide,
+  onOpenSettings,
+}: Props) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canEdit) return;
     const dismissed = localStorage.getItem(STORAGE_KEY);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- lecture localStorage client
     setVisible(!dismissed);
-  }, [isAdmin]);
+  }, [canEdit]);
 
-  if (!visible || !isAdmin) return null;
+  if (!visible || !canEdit) return null;
 
   return (
     <div className="mx-6 mt-4 rounded-2xl border border-[#00b5e2]/40 bg-gradient-to-r from-[#00b5e2]/10 to-white p-4">
@@ -32,18 +41,30 @@ export function ManagerGuideBanner({ lang, isAdmin, hasPresences, onOpenSettings
           <ol className="text-xs text-slate-600 space-y-1 list-decimal list-inside">
             <li>{t(lang, "guide_step_team")}</li>
             <li>{t(lang, "guide_step_individual")}</li>
-            {!hasPresences && <li className="font-bold text-[#00205b]">{t(lang, "guide_step_import")}</li>}
-            <li>{t(lang, "guide_step_data")}</li>
+            {!hasPresences && isAdmin && (
+              <li className="font-bold text-[#00205b]">{t(lang, "guide_step_generate")}</li>
+            )}
+            {isAdmin && <li>{t(lang, "guide_step_data")}</li>}
+            <li>{t(lang, "guide_step_help")}</li>
           </ol>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={onOpenSettings}
-            className="px-3 py-1.5 rounded-lg bg-[#00205b] text-white text-xs font-bold"
+            onClick={onOpenGuide}
+            className="px-3 py-1.5 rounded-lg bg-[#00b5e2] text-white text-xs font-bold"
           >
-            {t(lang, "settings")}
+            {t(lang, "guide_link")}
           </button>
+          {isAdmin && onOpenSettings && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="px-3 py-1.5 rounded-lg bg-[#00205b] text-white text-xs font-bold"
+            >
+              {t(lang, "settings")}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {

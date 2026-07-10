@@ -16,6 +16,7 @@ import { PersonnelForm } from "@/components/desktop/PersonnelForm";
 import { SettingsModal } from "@/components/desktop/SettingsModal";
 import { DesktopHeader } from "@/components/desktop/DesktopHeader";
 import { ManagerGuideBanner } from "@/components/desktop/ManagerGuideBanner";
+import { GuideModal } from "@/components/desktop/GuideModal";
 import { TeamViewSection } from "@/components/desktop/TeamViewSection";
 import { IndividualViewSection } from "@/components/desktop/IndividualViewSection";
 import { useDesktopData } from "@/hooks/useDesktopData";
@@ -86,6 +87,7 @@ export default function DesktopApp() {
   const [massOpen, setMassOpen] = useState(false);
   const [personFormOpen, setPersonFormOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
   const [rangeStatus, setRangeStatus] = useState("CP");
@@ -398,6 +400,13 @@ export default function DesktopApp() {
         onClose={() => setPersonFormOpen(false)}
       />
 
+      <GuideModal
+        open={guideOpen}
+        lang={lang}
+        userRole={userRole}
+        onClose={() => setGuideOpen(false)}
+      />
+
       <SettingsModal
         open={settingsOpen}
         isAdmin={isAdmin}
@@ -416,6 +425,7 @@ export default function DesktopApp() {
         isAdmin={isAdmin}
         onViewChange={setView}
         onSettingsOpen={() => setSettingsOpen(true)}
+        onGuideOpen={() => setGuideOpen(true)}
         onLangChange={(l) => patchFilters({ lang: l })}
         onModeToggle={() => patchFilters({ mode: mode === "production" ? "support" : "production" })}
       />
@@ -423,7 +433,9 @@ export default function DesktopApp() {
       <ManagerGuideBanner
         lang={lang}
         isAdmin={isAdmin}
+        canEdit={canEdit}
         hasPresences={hasTeamPresences}
+        onOpenGuide={() => setGuideOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -456,7 +468,6 @@ export default function DesktopApp() {
             onMassOpen={() => setMassOpen(true)}
             onShiftWeek={shiftWeek}
             onShiftMonth={shiftMonth}
-            onOpenSettings={() => setSettingsOpen(true)}
             onGenerateYear={() => generateYear(calendarMonth.year)}
             onCellClick={openCellEditor}
           />

@@ -39,7 +39,6 @@ type Props = {
   onMassOpen: () => void;
   onShiftWeek: (delta: number) => void;
   onShiftMonth: (delta: number) => void;
-  onOpenSettings: () => void;
   onGenerateYear: () => void;
   onCellClick: (personnelId: string, date: string, status: string, details?: DayPresence) => void;
 };
@@ -67,7 +66,6 @@ export function TeamViewSection({
   onMassOpen,
   onShiftWeek,
   onShiftMonth,
-  onOpenSettings,
   onGenerateYear,
   onCellClick,
 }: Props) {
@@ -104,7 +102,7 @@ export function TeamViewSection({
       </div>
 
       {!hasTeamPresences ? (
-        <EmptyTeamState lang={lang} isAdmin={isAdmin} onOpenSettings={onOpenSettings} onGenerateYear={onGenerateYear} />
+        <EmptyTeamState lang={lang} isAdmin={isAdmin} onGenerateYear={onGenerateYear} />
       ) : teamPeriod === "month" && monthly ? (
         <TeamMonthlyTable
           monthDates={monthly.monthDates}

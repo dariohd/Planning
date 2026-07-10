@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { DISPLAY_POSTES } from "@/lib/constants";
+import { LEGACY_SHEETS_IMPORT_ENABLED } from "@/lib/features";
 import { DeleteDataConfirmModal } from "./DeleteDataConfirmModal";
 import { StorageSwitchModal } from "./StorageSwitchModal";
 
@@ -471,8 +472,9 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
               <div className="rounded-xl border border-[#00b5e2]/30 bg-[#00b5e2]/5 p-3">
                 <p className="text-sm font-bold text-[#00205b] mb-1">Gestion des données</p>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Choisissez où stocker vos données, puis utilisez les exports CSV pour sauvegarder ou transférer vers Excel.
-                  Les deux modes permettent d&apos;importer et d&apos;exporter en CSV.
+                  {LEGACY_SHEETS_IMPORT_ENABLED
+                    ? "Choisissez où stocker vos données, puis utilisez les exports CSV pour sauvegarder ou transférer vers Excel."
+                    : "Sauvegardez et restaurez vos données via les exports CSV. L'application fonctionne en autonomie sur la base en ligne."}
                 </p>
               </div>
 
@@ -481,6 +483,8 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
                 <p className="text-sm font-black">{storageLabel}</p>
               </div>
 
+              {LEGACY_SHEETS_IMPORT_ENABLED && (
+              <>
               <div>
                 <p className="text-xs font-bold text-slate-600 mb-2">Changer de mode (1 clic + confirmation)</p>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -499,7 +503,7 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
                     className={`text-left rounded-xl border p-3 transition ${savedStorage === "google_sheets" ? "border-emerald-600 bg-emerald-50 ring-2 ring-emerald-200" : "border-slate-200 hover:border-slate-300"}`}
                   >
                     <p className="text-sm font-black text-[#00205b]">Google Sheets</p>
-                    <p className="text-[11px] text-slate-500 mt-1">Comme l&apos;ancienne version. Tableur Google en référence.</p>
+                    <p className="text-[11px] text-slate-500 mt-1">Synchronisation avec un tableur Google.</p>
                     {savedStorage === "google_sheets" && <p className="text-[10px] font-bold text-emerald-700 mt-2">Actif</p>}
                   </button>
                 </div>
@@ -507,7 +511,7 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
 
               {savedStorage === "google_sheets" && (
                 <div className="rounded-xl border p-3 space-y-3 bg-white">
-                  <p className="text-xs font-bold text-slate-600">2. Lier votre classeur Google</p>
+                  <p className="text-xs font-bold text-slate-600">Lier votre classeur Google</p>
                   <label className="block text-[11px] font-bold text-slate-500">
                     Lien ou ID du classeur Google Sheets
                     <input
@@ -518,7 +522,7 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
                     />
                   </label>
                   <label className="block text-[11px] font-bold text-slate-500">
-                    Lien de synchronisation (fourni par votre admin IT)
+                    Lien de synchronisation
                     <input
                       value={config.sheetsWebAppUrl}
                       onChange={(e) => setConfig((c) => c && ({ ...c, sheetsWebAppUrl: e.target.value }))}
@@ -533,11 +537,11 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
                   </div>
                 </div>
               )}
+              </>
+              )}
 
               <div className="rounded-xl border p-3 space-y-3 bg-white">
-                <p className="text-xs font-bold text-slate-600">
-                  {savedStorage === "google_sheets" ? "3" : "2"}. Exporter en CSV (Excel)
-                </p>
+                <p className="text-xs font-bold text-slate-600">Exporter en CSV (Excel)</p>
                 <p className="text-[11px] text-slate-500">
                   Fichiers compatibles Excel, point-virgule, encodage UTF-8. Ouvrez avec Excel ou Google Sheets.
                 </p>
@@ -550,9 +554,7 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
               </div>
 
               <div className="rounded-xl border p-3 space-y-3 bg-white">
-                <p className="text-xs font-bold text-slate-600">
-                  {savedStorage === "google_sheets" ? "4" : "3"}. Importer un CSV
-                </p>
+                <p className="text-xs font-bold text-slate-600">Importer un CSV</p>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {(["personnel", "presences", "capa"] as const).map((t) => (
                     <button
@@ -583,12 +585,10 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
                     if (file) void importCsv(file, csvImportType);
                   }}
                 />
+                {LEGACY_SHEETS_IMPORT_ENABLED && (
                 <div className="border-t pt-3 mt-3 space-y-3">
                   <div>
                     <p className="text-[11px] font-bold text-slate-600 mb-2">Import depuis Google Sheets (URL)</p>
-                    <p className="text-[10px] text-slate-500 mb-2">
-                      Récupère les présences via le lien de synchronisation GAS (Paramètres ou mode Google Sheets).
-                    </p>
                     <button
                       type="button"
                       disabled={dataBusy || !config?.sheetsWebAppUrl?.trim()}
@@ -599,28 +599,28 @@ export function SettingsModal({ open, isAdmin, onClose, onGenerateYear }: Props)
                     </button>
                   </div>
                   <div>
-                  <p className="text-[11px] font-bold text-slate-600 mb-2">Import export GAS (JSON)</p>
-                  <p className="text-[10px] text-slate-500 mb-2">Fichier généré par exportPresencesJson dans l&apos;ancienne application.</p>
-                  <button
-                    type="button"
-                    disabled={dataBusy}
-                    onClick={() => importGasRef.current?.click()}
-                    className="w-full px-4 py-2 rounded-xl border text-sm font-bold"
-                  >
-                    Choisir export-presences.json
-                  </button>
-                  <input
-                    ref={importGasRef}
-                    type="file"
-                    accept=".json,application/json"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void importGasJson(file);
-                    }}
-                  />
+                    <p className="text-[11px] font-bold text-slate-600 mb-2">Import JSON (migration)</p>
+                    <button
+                      type="button"
+                      disabled={dataBusy}
+                      onClick={() => importGasRef.current?.click()}
+                      className="w-full px-4 py-2 rounded-xl border text-sm font-bold"
+                    >
+                      Choisir export-presences.json
+                    </button>
+                    <input
+                      ref={importGasRef}
+                      type="file"
+                      accept=".json,application/json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void importGasJson(file);
+                      }}
+                    />
                   </div>
                 </div>
+                )}
                 <details className="text-[10px] text-slate-400">
                   <summary className="cursor-pointer font-bold text-slate-500">Sauvegarde technique (JSON)</summary>
                   <div className="flex gap-2 mt-2">

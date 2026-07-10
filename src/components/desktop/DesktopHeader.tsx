@@ -16,6 +16,7 @@ type Props = {
   isAdmin: boolean;
   onViewChange: (view: "equipe" | "individuelle" | "indicateurs" | "capa") => void;
   onSettingsOpen: () => void;
+  onGuideOpen: () => void;
   onLangChange: (lang: string) => void;
   onModeToggle: () => void;
 };
@@ -31,6 +32,7 @@ export function DesktopHeader({
   isAdmin,
   onViewChange,
   onSettingsOpen,
+  onGuideOpen,
   onLangChange,
   onModeToggle,
 }: Props) {
@@ -59,6 +61,9 @@ export function DesktopHeader({
         <Link href="/mobile" className="px-4 py-2 rounded-xl text-sm font-bold bg-[#00b5e2] text-white">
           {t(lang, "mobile")}
         </Link>
+        <button type="button" onClick={onGuideOpen} className="px-3 py-2 rounded-xl border border-[#00b5e2] text-[#00205b] text-sm font-bold">
+          {t(lang, "guide_link")}
+        </button>
         {isAdmin && (
           <button type="button" onClick={onSettingsOpen} className="px-3 py-2 rounded-xl border text-sm font-bold">
             {t(lang, "settings")}

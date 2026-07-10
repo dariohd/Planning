@@ -47,6 +47,18 @@ export const helpDatabase: Record<HelpLang, Record<string, HelpCategory>> = {
         { q: "Annuler une erreur ?", a: "Après validation, cliquez sur Annuler dans le bandeau (12 secondes)." },
       ],
     },
+    reap: {
+      title: "Chef d'équipe (REAP)",
+      icon: "users",
+      color: "bg-blue-50 text-blue-700",
+      questions: [
+        { q: "Modifier une présence ?", a: "Vue Équipe : cliquez sur la cellule du jour, choisissez le statut (CP, M, Abs, etc.)." },
+        { q: "Voir uniquement mon équipe ?", a: "Filtrez par votre nom dans le sélecteur d'équipe en haut du tableau." },
+        { q: "Saisir plusieurs jours d'un coup ?", a: "Vue Individuelle : sélectionnez le collaborateur, puis « Appliquer une plage » avec les dates." },
+        { q: "Consulter sur téléphone ?", a: "Bouton Mobile en haut à droite." },
+        { q: "Où est le mode d'emploi complet ?", a: "Bouton Guide en haut à droite." },
+      ],
+    },
     capa: {
       title: "Charge CAPA",
       icon: "factory",
@@ -63,9 +75,8 @@ export const helpDatabase: Record<HelpLang, Record<string, HelpCategory>> = {
       questions: [
         { q: "Imprimer le planning ?", a: "Vue Équipe, mode semaine, icône Imprimer." },
         { q: "Exporter le personnel ?", a: "Paramètres > Actions > Export CSV par rôle." },
-        { q: "Sauvegarder toutes les données ?", a: "Paramètres > Données > Exporter tout (JSON)." },
-        { q: "Lier Google Sheets ?", a: "Paramètres > Données : ID classeur ou Web App GAS, puis Envoyer / Importer." },
-        { q: "Supprimer toutes les données ?", a: "Paramètres > Données > Zone dangereuse. Export proposé avant suppression." },
+        { q: "Sauvegarder toutes les données ?", a: "Paramètres > Données > Tout exporter (CSV) ou sauvegarde JSON technique." },
+        { q: "Supprimer toutes les données ?", a: "Paramètres > Données > Zone sensible. Export proposé avant suppression." },
       ],
     },
   },
@@ -106,6 +117,18 @@ export const helpDatabase: Record<HelpLang, Record<string, HelpCategory>> = {
       questions: [
         { q: "Apply status to many people?", a: "Team view > Mass update." },
         { q: "Undo?", a: "Click Cancel in the toast banner within 12 seconds." },
+      ],
+    },
+    reap: {
+      title: "Team lead (REAP)",
+      icon: "users",
+      color: "bg-blue-50 text-blue-700",
+      questions: [
+        { q: "Edit attendance?", a: "Team view: click a day cell and pick a status." },
+        { q: "Filter my team?", a: "Use the team selector at the top of the table." },
+        { q: "Enter several days?", a: "Individual view: date range tool." },
+        { q: "Mobile access?", a: "Mobile button top right." },
+        { q: "Full handbook?", a: "Guide button top right." },
       ],
     },
     capa: {
@@ -164,6 +187,18 @@ export const helpDatabase: Record<HelpLang, Record<string, HelpCategory>> = {
       questions: [
         { q: "Aplicar estado a várias pessoas?", a: "Vista Equipa > Alteração em massa." },
         { q: "Anular?", a: "Clique em Anular no aviso (12 segundos)." },
+      ],
+    },
+    reap: {
+      title: "Chefe de equipa (REAP)",
+      icon: "users",
+      color: "bg-blue-50 text-blue-700",
+      questions: [
+        { q: "Editar presença?", a: "Vista Equipa: clique na célula do dia." },
+        { q: "Filtrar a minha equipa?", a: "Seletor de equipa no topo da tabela." },
+        { q: "Vários dias de uma vez?", a: "Vista Individual: intervalo de datas." },
+        { q: "No telemóvel?", a: "Botão Mobile." },
+        { q: "Manual completo?", a: "Botão Guia no topo." },
       ],
     },
     capa: {

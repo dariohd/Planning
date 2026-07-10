@@ -30,14 +30,18 @@ export async function POST(req: NextRequest) {
 
     await linkDemoUser();
 
-    let importResult = null;
     const config = await getAppConfig();
-    const url = webAppUrl || config.sheetsWebAppUrl;
     const configPatch: Partial<typeof config> = {};
     if (spreadsheetId?.trim()) configPatch.sheetsSpreadsheetId = spreadsheetId.trim();
     if (webAppUrl?.trim()) configPatch.sheetsWebAppUrl = webAppUrl.trim();
     if (Object.keys(configPatch).length) {
       await saveAppConfig({ ...config, ...configPatch });
+    }
+
+    const url = webAppUrl || config.sheetsWebAppUrl;
+    let importResult = null;
+    if (url?.trim()) {
+      importResult = await importPresencesFromGasUrl(url, { yearFilter });
     }
 
     const stats = await getDatabaseStats();
