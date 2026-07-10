@@ -30,6 +30,6 @@ test("guide modal s'ouvre", async ({ page }) => {
 
 test("vue mobile accessible", async ({ page }) => {
   await loginAsAdmin(page);
-  await page.getByRole("link", { name: "Mobile" }).click();
+  await page.getByRole("link", { name: "Vue téléphone" }).click();
   await expect(page).toHaveURL(/\/mobile/);
 });

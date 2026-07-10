@@ -8,7 +8,7 @@ import { getMondayOfWeek } from "@/lib/shifts";
 import { fullName } from "@/lib/personnel";
 import { t, type Lang } from "@/lib/i18n";
 import { MobilePresenceSheet } from "@/components/mobile/MobilePresenceSheet";
-import Link from "next/link";
+import { LinkToDesktopView } from "@/components/shared/DeviceViewSwitch";
 import { signOut } from "next-auth/react";
 import { useToast } from "@/components/shared/ToastProvider";
 
@@ -176,7 +176,7 @@ export default function MobileApp() {
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={() => setMode(mode === "production" ? "support" : "production")} aria-label={mode === "production" ? t(lang, "production") : t(lang, "support")} className="text-xs font-bold px-2 py-1 rounded-lg border">{mode === "production" ? t(lang, "production").slice(0, 4) : t(lang, "support").slice(0, 7)}</button>
-          <Link href="/desktop" className="text-xs font-bold px-3 py-2 rounded-xl bg-white border">{t(lang, "mobile_desktop")}</Link>
+          <LinkToDesktopView lang={lang} />
           <button type="button" onClick={() => signOut()} className="text-xs text-slate-500 px-2">{t(lang, "mobile_logout")}</button>
         </div>
       </header>
