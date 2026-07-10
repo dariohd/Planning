@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const port = Number(process.env.E2E_PORT ?? 3100);
 const baseURL = `http://127.0.0.1:${port}`;
 const databaseUrl =
-  process.env.DATABASE_URL ?? "postgresql://ci:ci@localhost:5432/ci?schema=public";
+  process.env.DATABASE_URL ?? "postgresql://ci:ci@127.0.0.1:54329/ci?schema=public";
 
 export default defineConfig({
   testDir: "e2e",

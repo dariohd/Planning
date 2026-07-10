@@ -127,7 +127,7 @@ Formats acceptés : clés de dates `presences` (export GAS) ou `months` compact.
 | `npm run db:seed` | Import personnel uniquement |
 | `npm run import:presences` | Import présences depuis export GAS |
 | `npm run post-migrate` | Liaison compte démo + stats base |
-| `npm run generate:year` | Génère plannings annuels (`-- 2026`) |
+| `npm run test:e2e` | Tests bout en bout (PostgreSQL embarqué, port 54329) |
 
 ## Déploiement
 
