@@ -7,6 +7,7 @@ import { DISPLAY_POSTES } from "@/lib/constants";
 import { usePlanningFilters } from "@/lib/usePlanningFilters";
 import { canUserEdit, isAdministrator } from "@/lib/client-permissions";
 import { getMondayOfWeek } from "@/lib/shifts";
+import { mapTeamSelectionForApi, sectorOptionLabel } from "@/lib/sectors";
 import { fullName } from "@/lib/personnel";
 import { PresenceEditor } from "@/components/shared/PresenceEditor";
 import { IndicatorsView } from "@/components/desktop/IndicatorsView";
@@ -105,8 +106,10 @@ export default function DesktopApp() {
     [data]
   );
 
+  const sectors = data?.settings.sectorsConfig ?? [];
+
   const selectionParam = teamSelections
-    .map((s) => (s === "Non affectés 3×8" ? "__UNASSIGNED_3x8__" : s))
+    .map((s) => mapTeamSelectionForApi(s, sectors))
     .join("||");
 
   const loadWeekly = useCallback(async () => {
@@ -173,7 +176,11 @@ export default function DesktopApp() {
 
   const teamOptions = useMemo(() => {
     if (!data) return ["Tous"];
-    return ["Tous", "Non affectés 3×8", ...data.chefsEquipe.map((c) => `${c.name} (${c.role})`)];
+    const sectorOpts =
+      data.settings.enableSectors && data.settings.sectorsConfig?.length
+        ? data.settings.sectorsConfig.map((s) => sectorOptionLabel(s))
+        : [];
+    return ["Tous", "Non affectés 3×8", ...sectorOpts, ...data.chefsEquipe.map((c) => `${c.name} (${c.role})`)];
   }, [data]);
 
   const filteredPersonnel = useMemo(() => {
@@ -266,11 +273,16 @@ export default function DesktopApp() {
     status: string;
     location?: string;
   }) => {
-    await fetch("/api/presences/range/batch", {
+    const res = await fetch("/api/presences/range/batch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast((err as { error?: string }).error ?? "Modification groupée échouée", { error: true });
+      return;
+    }
     refreshTeam();
     showToast(`Modification groupée : ${payload.personnelIds.length} personne(s)`);
   };

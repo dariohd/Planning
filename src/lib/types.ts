@@ -44,5 +44,13 @@ export type InitialData = {
   respPrepList: { id: string; name: string }[];
   respQualiteList: { id: string; name: string }[];
   lastModified: string;
-  settings: { appName: string; groupByMachine?: boolean; holidayCountry?: "FR" | "PT"; workstations?: string[]; missions?: string[] };
+  settings: {
+    appName: string;
+    groupByMachine?: boolean;
+    holidayCountry?: "FR" | "PT";
+    workstations?: string[];
+    missions?: string[];
+    enableSectors?: boolean;
+    sectorsConfig?: { id: string; label: string; reapIds: string[] }[];
+  };
 };

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
+import { getActiveSectors } from "@/lib/app-config";
 import { prisma } from "@/lib/db";
 import { filterPersonnelByMode, toPersonnelRecord } from "@/lib/personnel";
 import { getPresencesForRange } from "@/lib/presences";
@@ -37,7 +38,9 @@ export async function GET(req: NextRequest) {
     endDate.toISOString().slice(0, 10)
   );
 
-  const weekly = buildWeeklySchedule(selection, weekStart, allPersonnel, presencesByPerson, shiftFilter);
+  const sectors = await getActiveSectors();
+
+  const weekly = buildWeeklySchedule(selection, weekStart, allPersonnel, presencesByPerson, shiftFilter, sectors);
   const html = buildPrintableHtml(schedulesFromWeekly(weekly, selection), lang);
 
   return new NextResponse(html, {

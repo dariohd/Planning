@@ -146,6 +146,8 @@ const dict: Record<Lang, Record<string, string>> = {
     settings_country_pt: "Portugal",
     settings_group_machine: "Grouper la vue équipe par poste",
     settings_sectors: "Activer les secteurs personnalisés",
+    settings_sectors_format: "Secteurs (JSON ou « Nom : id-reap1, id-reap2 » par ligne)",
+    status_legend: "Légende",
     settings_data_title: "Gestion des données",
     settings_data_desc:
       "Choisissez votre mode de stockage ou liez un classeur Google Sheets si votre atelier centralise ses données sur un tableur. Les exports CSV restent disponibles pour Excel.",
@@ -174,6 +176,9 @@ const dict: Record<Lang, Record<string, string>> = {
     mobile_choose_member: "Choisir un collaborateur",
     mobile_toast_saved: "Présence enregistrée",
     mobile_toast_updated: "Statut mis à jour",
+    mobile_load_error: "Impossible de charger les données. Vérifiez votre connexion.",
+    mobile_retry: "Réessayer",
+    mobile_swipe_hint: "Swipe → Présent · ← Absence",
   }, "fr"),
   en: buildLang({
     planning: "Attendance Planning",
@@ -287,6 +292,8 @@ const dict: Record<Lang, Record<string, string>> = {
     settings_country_pt: "Portugal",
     settings_group_machine: "Group team view by workstation",
     settings_sectors: "Enable custom sectors",
+    settings_sectors_format: "Sectors (JSON or « Name : reap-id1, reap-id2 » per line)",
+    status_legend: "Legend",
     settings_data_title: "Data management",
     settings_data_desc:
       "Choose your storage mode or link a Google Sheets workbook if your site keeps master data in a spreadsheet. CSV exports remain available for Excel.",
@@ -315,6 +322,9 @@ const dict: Record<Lang, Record<string, string>> = {
     mobile_choose_member: "Select a team member",
     mobile_toast_saved: "Attendance saved",
     mobile_toast_updated: "Status updated",
+    mobile_load_error: "Could not load data. Check your connection.",
+    mobile_retry: "Retry",
+    mobile_swipe_hint: "Swipe → Present · ← Absent",
   }, "en"),
   pt: buildLang({
     planning: "Planeamento",
@@ -428,6 +438,8 @@ const dict: Record<Lang, Record<string, string>> = {
     settings_country_pt: "Portugal",
     settings_group_machine: "Agrupar vista equipa por posto",
     settings_sectors: "Ativar setores personalizados",
+    settings_sectors_format: "Setores (JSON ou « Nome : id-reap1, id-reap2 » por linha)",
+    status_legend: "Legenda",
     settings_data_title: "Gestão de dados",
     settings_data_desc:
       "Escolha o modo de armazenamento ou ligue um Google Sheets se o seu atelier centraliza os dados numa folha. As exportações CSV continuam disponíveis para Excel.",
@@ -456,6 +468,9 @@ const dict: Record<Lang, Record<string, string>> = {
     mobile_choose_member: "Escolher colaborador",
     mobile_toast_saved: "Presença guardada",
     mobile_toast_updated: "Estado atualizado",
+    mobile_load_error: "Não foi possível carregar os dados. Verifique a ligação.",
+    mobile_retry: "Tentar novamente",
+    mobile_swipe_hint: "Deslizar → Presente · ← Ausência",
   }, "pt"),
 };
 

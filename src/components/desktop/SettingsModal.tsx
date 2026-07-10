@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { DISPLAY_POSTES } from "@/lib/constants";
+import { parseSectorsConfigText } from "@/lib/sectors";
 import { SHEETS_SYNC_ENABLED } from "@/lib/features";
 import { t, type Lang } from "@/lib/i18n";
 import { DeleteDataConfirmModal } from "./DeleteDataConfirmModal";
@@ -48,6 +49,7 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
   const [archiveYear, setArchiveYear] = useState(new Date().getFullYear() - 1);
   const [missionsText, setMissionsText] = useState("Mi");
   const [workstationsText, setWorkstationsText] = useState(DISPLAY_POSTES.join(", "));
+  const [sectorsText, setSectorsText] = useState("[]");
   const [newRole, setNewRole] = useState("");
   const [exportRoles, setExportRoles] = useState<string[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -70,6 +72,7 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
         setSavedStorage(c.dataStorage ?? "database");
         setMissionsText((c.missions ?? ["Mi"]).join(", "));
         setWorkstationsText((c.workstations ?? DISPLAY_POSTES).join(", "));
+        setSectorsText(JSON.stringify(c.sectorsConfig ?? [], null, 2));
       });
     if (isAdmin) {
       fetch("/api/users").then((r) => r.json()).then((u) => Array.isArray(u) && setUsers(u));
@@ -83,12 +86,22 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
     setTimeout(() => setMsg(null), 4000);
   };
 
+  const parsedSectors = () => {
+    try {
+      return parseSectorsConfigText(sectorsText);
+    } catch {
+      return config?.sectorsConfig ?? [];
+    }
+  };
+
   const saveConfig = async (reapplyHolidays = false) => {
+    const sectorsConfig = config?.enableSectors ? parsedSectors() : [];
     await fetch("/api/config", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...config,
+        sectorsConfig,
         missions: missionsText.split(",").map((s) => s.trim()).filter(Boolean),
         workstations: workstationsText.split(",").map((s) => s.trim()).filter(Boolean),
       }),
@@ -266,11 +279,13 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
   };
 
   const saveConfigFields = async () => {
+    const sectorsConfig = config?.enableSectors ? parsedSectors() : [];
     await fetch("/api/config", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...config,
+        sectorsConfig,
         missions: missionsText.split(",").map((s) => s.trim()).filter(Boolean),
         workstations: workstationsText.split(",").map((s) => s.trim()).filter(Boolean),
       }),
@@ -398,6 +413,18 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
                 <input type="checkbox" checked={config.enableSectors} onChange={(e) => setConfig((c) => c && ({ ...c, enableSectors: e.target.checked }))} />
                 {t(lang, "settings_sectors")}
               </label>
+              {config.enableSectors && (
+                <label className="block text-xs font-bold text-slate-500">
+                  {t(lang, "settings_sectors_format")}
+                  <textarea
+                    value={sectorsText}
+                    onChange={(e) => setSectorsText(e.target.value)}
+                    rows={4}
+                    placeholder={'[{"id":"b11","label":"B11/12 SA","reapIds":["uuid-reap-1"]}]'}
+                    className="mt-1 w-full rounded-xl border px-3 py-2 text-[11px] font-mono font-normal"
+                  />
+                </label>
+              )}
               <div>
                 <p className="text-xs font-bold text-slate-500 mb-1">Rôles personnalisés</p>
                 <div className="flex gap-2 mb-2">

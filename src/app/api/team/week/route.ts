@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
+import { getAppConfig } from "@/lib/app-config";
 import { prisma } from "@/lib/db";
 import { filterPersonnelByMode, toPersonnelRecord } from "@/lib/personnel";
 import { getPresencesForRange } from "@/lib/presences";
@@ -32,12 +33,16 @@ export async function GET(req: NextRequest) {
   const memberIds = allPersonnel.map((p) => p.id);
   const presencesByPerson = await getPresencesForRange(memberIds, weekStart, endIso);
 
+  const appConfig = await getAppConfig();
+  const sectors = appConfig.enableSectors ? appConfig.sectorsConfig : [];
+
   const result = buildWeeklySchedule(
     selection,
     weekStart,
     allPersonnel,
     presencesByPerson,
-    shiftFilter && shiftFilter !== "Tous" ? shiftFilter : null
+    shiftFilter && shiftFilter !== "Tous" ? shiftFilter : null,
+    sectors
   );
 
   return NextResponse.json(result);

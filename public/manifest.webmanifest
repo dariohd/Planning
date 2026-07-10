@@ -9,5 +9,13 @@
   "background_color": "#00205b",
   "theme_color": "#00205b",
   "lang": "fr",
-  "categories": ["productivity", "business"]
+  "categories": ["productivity", "business"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }

@@ -1,6 +1,6 @@
 import { prisma } from "./db";
 import { PRESENT_STATUSES } from "./constants";
-import { getAppConfig } from "./app-config";
+import { getAppConfig, getActiveSectors } from "./app-config";
 import { fetchAdeccTargets } from "./adecc";
 import { filterPersonnelByMode, fullName, toPersonnelRecord } from "./personnel";
 import { getPresencesForRange } from "./presences";
@@ -282,11 +282,15 @@ export async function getWeeklyComparison(mode: AppMode, selectedDateStr: string
     weekDates[6]
   );
 
+  const sectorsConfig = await getActiveSectors();
+
   const teamMembers = getTeamMembersFromSelections(
     parseTeamSelections(teamSelection),
     referenceDate,
     allPersonnel,
-    presencesByPerson
+    presencesByPerson,
+    null,
+    sectorsConfig
   );
 
   const group1Roles =
@@ -353,11 +357,14 @@ export async function getWorkstationHeadcount(
     dateStr,
     dateStr
   );
+  const sectorsConfig = await getActiveSectors();
   const teamMembers = getTeamMembersFromSelections(
     parseTeamSelections(teamSelection),
     referenceDate,
     allPersonnel,
-    presencesByPerson
+    presencesByPerson,
+    null,
+    sectorsConfig
   );
 
   const byPoste: Record<string, { theoretical: number; present: number; names: string[] }> = {};

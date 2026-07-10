@@ -16,6 +16,9 @@ export async function GET(req: Request) {
 
   if (!clientTs || Number(serverTs) > Number(clientTs)) {
     const data = await getInitialData(authResult.session!.user!.email!, mode, includeArchived);
+    if ("error" in data) {
+      return NextResponse.json({ error: data.error }, { status: 403 });
+    }
     return NextResponse.json({ hasChanges: true, lastModified: serverTs, newData: data });
   }
 

@@ -51,13 +51,39 @@ export function IndicatorsView({ mode, selection: initialSelection, date: initia
   const [date, setDate] = useState(initialDate);
   const [selection, setSelection] = useState(initialSelection);
   const [kpiModal, setKpiModal] = useState<{ title: string; names: string[] } | null>(null);
+  const [kpiSearch, setKpiSearch] = useState("");
+
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams({ mode, date, selection });
-    fetch(`/api/indicators?${params}`).then((r) => r.json()).then(setData);
-    fetch(`/api/indicators/weekly-comparison?${params}`).then((r) => r.json()).then(setComparison);
-    fetch(`/api/indicators/workstations?${params}`).then((r) => r.json()).then(setWorkstations);
+    let cancelled = false;
+    void (async () => {
+      const params = new URLSearchParams({ mode, date, selection });
+      try {
+        const [ind, comp, ws] = await Promise.all([
+          fetch(`/api/indicators?${params}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error("indicators")))),
+          fetch(`/api/indicators/weekly-comparison?${params}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error("comparison")))),
+          fetch(`/api/indicators/workstations?${params}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error("workstations")))),
+        ]);
+        if (cancelled) return;
+        setData(ind);
+        setComparison(comp);
+        setWorkstations(ws);
+        setLoadError(false);
+      } catch {
+        if (!cancelled) {
+          setLoadError(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [mode, date, selection]);
+
+  if (loadError) {
+    return <p className="text-center py-12 text-red-600 font-bold">Impossible de charger les indicateurs.</p>;
+  }
 
   if (!data) {
     return <p className="text-center py-12 text-slate-500">Chargement des indicateurs...</p>;
@@ -219,10 +245,30 @@ export function IndicatorsView({ mode, selection: initialSelection, date: initia
       )}
 
       {kpiModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setKpiModal(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="kpi-modal-title"
+          onClick={() => { setKpiModal(null); setKpiSearch(""); }}
+          onKeyDown={(e) => e.key === "Escape" && (setKpiModal(null), setKpiSearch(""))}
+        >
           <div className="bg-white rounded-3xl p-6 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <h4 className="font-black text-[#00205b] mb-3">{kpiModal.title}</h4>
-            <ul className="text-sm space-y-1">{kpiModal.names.map((n) => <li key={n}>{n}</li>)}</ul>
+            <h4 id="kpi-modal-title" className="font-black text-[#00205b] mb-3">{kpiModal.title}</h4>
+            <input
+              type="search"
+              value={kpiSearch}
+              onChange={(e) => setKpiSearch(e.target.value)}
+              placeholder="Rechercher…"
+              className="w-full mb-3 rounded-xl border px-3 py-2 text-sm"
+            />
+            <ul className="text-sm space-y-1">
+              {kpiModal.names
+                .filter((n) => !kpiSearch.trim() || n.toLowerCase().includes(kpiSearch.toLowerCase()))
+                .map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+            </ul>
           </div>
         </div>
       )}

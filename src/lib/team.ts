@@ -2,13 +2,16 @@ import { calculateShiftForDate } from "./shifts";
 import type { PersonnelRecord } from "./types";
 import { fullName } from "./personnel";
 import type { DayPresence, PresenceMap } from "./types";
+import type { SectorConfig } from "./app-config";
+import { SECTOR_API_PREFIX } from "./sectors";
 
 export function getTeamMembersOptimized(
   selection: string,
   referenceMonday: Date,
   allPersonnel: PersonnelRecord[],
   presencesByPerson: Record<string, PresenceMap>,
-  shiftFilter: string | null = null
+  shiftFilter: string | null = null,
+  sectorsConfig: SectorConfig[] = []
 ): PersonnelRecord[] {
   let members: PersonnelRecord[] = [];
 
@@ -19,6 +22,13 @@ export function getTeamMembersOptimized(
       const tq = (p.typeQuart ?? "").replace(/\*/g, "x").toLowerCase();
       return tq.includes("3x8") && !p.chefEquipeAssocie;
     });
+  } else if (selection.startsWith(SECTOR_API_PREFIX)) {
+    const sectorId = selection.slice(SECTOR_API_PREFIX.length);
+    const sector = sectorsConfig.find((s) => s.id === sectorId);
+    if (sector?.reapIds?.length) {
+      const reapSet = new Set(sector.reapIds);
+      members = allPersonnel.filter((p) => p.chefEquipeAssocie && reapSet.has(p.chefEquipeAssocie));
+    }
   } else if (selection.endsWith(" (REAP)")) {
     const name = selection.replace(" (REAP)", "");
     const manager = allPersonnel.find((p) => fullName(p) === name && p.role === "REAP");
@@ -78,15 +88,16 @@ export function getTeamMembersFromSelections(
   referenceMonday: Date,
   allPersonnel: PersonnelRecord[],
   presencesByPerson: Record<string, PresenceMap>,
-  shiftFilter: string | null = null
+  shiftFilter: string | null = null,
+  sectorsConfig: SectorConfig[] = []
 ): PersonnelRecord[] {
   if (selections.includes("Tous") || selections.length === 0) {
-    return getTeamMembersOptimized("Tous", referenceMonday, allPersonnel, presencesByPerson, shiftFilter);
+    return getTeamMembersOptimized("Tous", referenceMonday, allPersonnel, presencesByPerson, shiftFilter, sectorsConfig);
   }
 
   const memberIds = new Set<string>();
   for (const sel of selections) {
-    const members = getTeamMembersOptimized(sel, referenceMonday, allPersonnel, presencesByPerson, shiftFilter);
+    const members = getTeamMembersOptimized(sel, referenceMonday, allPersonnel, presencesByPerson, shiftFilter, sectorsConfig);
     for (const m of members) memberIds.add(m.id);
   }
 
@@ -100,7 +111,8 @@ export function buildWeeklySchedule(
   weekStartDateStr: string,
   allPersonnel: PersonnelRecord[],
   presencesByPerson: Record<string, PresenceMap>,
-  shiftFilter: string | null = null
+  shiftFilter: string | null = null,
+  sectorsConfig: SectorConfig[] = []
 ) {
   const selections = parseTeamSelections(teamSelection);
   const teamName = selections.length === 1 ? selections[0].replace(" (REAP)", "").replace(" (RP)", "") : "Fusion";
@@ -110,7 +122,8 @@ export function buildWeeklySchedule(
     referenceMonday,
     allPersonnel,
     presencesByPerson,
-    shiftFilter
+    shiftFilter,
+    sectorsConfig
   );
 
   const schedule: Record<string, Record<string, string>> = {};
@@ -149,7 +162,8 @@ export function buildMonthlySchedule(
   month: number,
   allPersonnel: PersonnelRecord[],
   presencesByPerson: Record<string, PresenceMap>,
-  shiftFilter: string | null = null
+  shiftFilter: string | null = null,
+  sectorsConfig: SectorConfig[] = []
 ) {
   const selections = parseTeamSelections(teamSelection);
   const referenceMonday = new Date(Date.UTC(year, month, 1, 12, 0, 0));
@@ -158,7 +172,8 @@ export function buildMonthlySchedule(
     referenceMonday,
     allPersonnel,
     presencesByPerson,
-    shiftFilter
+    shiftFilter,
+    sectorsConfig
   );
 
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();

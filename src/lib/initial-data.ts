@@ -1,3 +1,4 @@
+import { getAppConfig } from "@/lib/app-config";
 import { prisma } from "@/lib/db";
 import { filterPersonnelByMode, fullName, toPersonnelRecord } from "@/lib/personnel";
 import { getLastModified, nameFromEmail } from "@/lib/permissions";
@@ -51,20 +52,15 @@ export async function getInitialData(
     .filter((p) => p.role === "Responsable Qualité")
     .map((p) => ({ id: p.id, name: fullName(p) }));
 
-  const config = await prisma.appConfig.findUnique({ where: { id: "default" } });
-  const configData = (config?.data as {
-    appName?: string;
-    groupByMachine?: boolean;
-    holidayCountry?: "FR" | "PT";
-    workstations?: string[];
-    missions?: string[];
-  }) ?? {};
+  const appConfig = await getAppConfig();
   const settings = {
-    appName: configData.appName ?? "Planning Présence",
-    groupByMachine: configData.groupByMachine ?? false,
-    holidayCountry: configData.holidayCountry ?? "FR",
-    workstations: configData.workstations ?? [],
-    missions: configData.missions ?? ["Mi"],
+    appName: appConfig.appName,
+    groupByMachine: appConfig.groupByMachine,
+    holidayCountry: appConfig.holidayCountry,
+    workstations: appConfig.workstations,
+    missions: appConfig.missions,
+    enableSectors: appConfig.enableSectors,
+    sectorsConfig: appConfig.sectorsConfig,
   };
 
   return {

@@ -6,6 +6,7 @@ import { TeamMonthlyTable } from "@/components/desktop/TeamMonthlyTable";
 import { TeamFilterDropdown } from "@/components/desktop/TeamFilterDropdown";
 import { EmptyTeamState } from "@/components/desktop/EmptyTeamState";
 import { StatusCell } from "@/components/shared/StatusCell";
+import { StatusLegend } from "@/components/shared/StatusLegend";
 import { canModifyPerson } from "@/lib/client-permissions";
 import { t, type Lang } from "@/lib/i18n";
 
@@ -100,6 +101,8 @@ export function TeamViewSection({
           <button type="button" onClick={() => (teamPeriod === "week" ? onShiftWeek(1) : onShiftMonth(1))} className="px-3 py-2 rounded-lg bg-white border">→</button>
         </div>
       </div>
+
+      <StatusLegend lang={lang} className="mb-4" />
 
       {!hasTeamPresences ? (
         <EmptyTeamState lang={lang} isAdmin={isAdmin} onGenerateYear={onGenerateYear} />

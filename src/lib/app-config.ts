@@ -85,6 +85,11 @@ export async function getAppConfig(): Promise<AppConfigData> {
   };
 }
 
+export async function getActiveSectors(): Promise<SectorConfig[]> {
+  const config = await getAppConfig();
+  return config.enableSectors ? config.sectorsConfig : [];
+}
+
 export async function saveAppConfig(patch: Partial<AppConfigData>): Promise<AppConfigData> {
   const current = await getAppConfig();
   const merged = { ...current, ...patch };

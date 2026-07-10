@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DayPresence, InitialData, WeeklySchedule } from "@/lib/types";
 import { STATUS_BG } from "@/lib/constants";
 import { canModifyPerson, canUserEdit } from "@/lib/client-permissions";
 import { getMondayOfWeek } from "@/lib/shifts";
+import { mapTeamSelectionForApi, sectorOptionLabel } from "@/lib/sectors";
 import { fullName } from "@/lib/personnel";
 import { t, type Lang } from "@/lib/i18n";
 import { MobilePresenceSheet } from "@/components/mobile/MobilePresenceSheet";
@@ -13,6 +14,16 @@ import { signOut } from "next-auth/react";
 import { useToast } from "@/components/shared/ToastProvider";
 
 const MOBILE_FILTERS_KEY = "planning:desktop";
+
+function persistLang(lang: Lang) {
+  try {
+    const raw = localStorage.getItem(MOBILE_FILTERS_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    localStorage.setItem(MOBILE_FILTERS_KEY, JSON.stringify({ ...parsed, lang }));
+  } catch {
+    /* ignore */
+  }
+}
 
 function getMobileLang(): Lang {
   if (typeof window === "undefined") return "fr";
@@ -30,12 +41,14 @@ function getMobileLang(): Lang {
 
 type Tab = "equipe" | "stats" | "capa" | "annual";
 
-const QUICK_STATUSES = ["M", "A", "N", "J", "CP", "Abs", "Ma", "F", ""];
 const WEEK_DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven"];
+
+type LoadState = "loading" | "ready" | "error";
 
 export default function MobileApp() {
   const { showToast } = useToast();
-  const [lang] = useState<Lang>(() => getMobileLang());
+  const [lang, setLang] = useState<Lang>(() => getMobileLang());
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const [offline, setOffline] = useState(false);
   const [absDay, setAbsDay] = useState(0);
   const [annualMonth, setAnnualMonth] = useState<number | null>(null);
@@ -54,6 +67,17 @@ export default function MobileApp() {
   const touchStart = useRef<{ x: number; y: number; id: string; date: string } | null>(null);
   const canEdit = data ? canUserEdit(data.currentUser.role) : false;
 
+  const sectors = useMemo(() => data?.settings.sectorsConfig ?? [], [data]);
+  const selectionParam = useMemo(() => mapTeamSelectionForApi(selection, sectors), [selection, sectors]);
+  const teamOptions = useMemo(() => {
+    if (!data) return ["Tous"];
+    const sectorOpts =
+      data.settings.enableSectors && data.settings.sectorsConfig?.length
+        ? data.settings.sectorsConfig.map((s) => sectorOptionLabel(s))
+        : [];
+    return ["Tous", "Non affectés 3×8", ...sectorOpts, ...data.chefsEquipe.map((c) => `${c.name} (${c.role})`)];
+  }, [data]);
+
   const onTouchStart = (e: React.TouchEvent, id: string, date: string) => {
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, id, date };
   };
@@ -65,15 +89,12 @@ export default function MobileApp() {
     const dx = e.changedTouches[0].clientX - start.x;
     const dy = e.changedTouches[0].clientY - start.y;
     if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
-    const idx = QUICK_STATUSES.indexOf(current);
-    const next =
-      dx > 0
-        ? QUICK_STATUSES[(idx + 1) % QUICK_STATUSES.length]
-        : QUICK_STATUSES[(idx - 1 + QUICK_STATUSES.length) % QUICK_STATUSES.length];
-    void quickSetStatus(personId, date, next);
+    const next = dx > 0 ? "P" : "Abs";
+    void quickSetStatus(personId, date, next, current);
   };
 
   const load = useCallback(async () => {
+    setLoadState((s) => (s === "ready" ? s : "loading"));
     try {
       const cacheKey = `planning-cache-${mode}`;
       const initRes = await fetch(`/api/initial-data?mode=${mode}`);
@@ -81,23 +102,31 @@ export default function MobileApp() {
       setData(init);
       setOffline(false);
       localStorage.setItem(cacheKey, JSON.stringify(init));
-      const params = new URLSearchParams({ selection, weekStart, mode, shiftFilter });
+      const params = new URLSearchParams({ selection: selectionParam, weekStart, mode, shiftFilter });
       const weekRes = await fetch(`/api/team/week?${params}`);
       const weekData = await weekRes.json();
       setWeekly(weekData);
       localStorage.setItem(`${cacheKey}-week`, JSON.stringify(weekData));
-      const indRes = await fetch(`/api/indicators?mode=${mode}&date=${weekStart}&selection=${selection}`);
+      const indRes = await fetch(`/api/indicators?mode=${mode}&date=${weekStart}&selection=${encodeURIComponent(selectionParam)}`);
       setStats(await indRes.json());
       const capaRes = await fetch(`/api/capa?mode=${mode}&weekStart=${weekStart}`);
       setCapa(await capaRes.json());
+      setOffline(false);
+      setLoadState("ready");
     } catch {
       const cacheKey = `planning-cache-${mode}`;
       const cached = localStorage.getItem(cacheKey);
       const cachedWeek = localStorage.getItem(`${cacheKey}-week`);
-      if (cached) { setData(JSON.parse(cached)); setOffline(true); }
-      if (cachedWeek) setWeekly(JSON.parse(cachedWeek));
+      if (cached) {
+        setData(JSON.parse(cached));
+        setOffline(true);
+        if (cachedWeek) setWeekly(JSON.parse(cachedWeek));
+        setLoadState("ready");
+      } else {
+        setLoadState("error");
+      }
     }
-  }, [selection, weekStart, shiftFilter, mode]);
+  }, [selectionParam, weekStart, shiftFilter, mode]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch au montage + polling
@@ -120,23 +149,34 @@ export default function MobileApp() {
 
   const savePresence = async (payload: { status: string; comment?: string; hs?: string; location?: string }) => {
     if (!sheet || !data) return;
+    const undo = {
+      type: "details" as const,
+      personnelId: sheet.id,
+      date: sheet.date,
+      oldStatus: sheet.status,
+      oldComment: sheet.details?.c,
+      oldHs: sheet.details?.hs,
+      oldLocation: sheet.details?.loc,
+    };
     await fetch("/api/presences/details", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ personnelId: sheet.id, date: sheet.date, status: payload.status, comment: payload.comment, hs: payload.hs, location: payload.location }),
     });
     setSheet(null);
-    showToast(t(lang, "mobile_toast_saved"));
+    showToast(t(lang, "mobile_toast_saved"), { undo });
     load();
   };
 
-  const quickSetStatus = async (personId: string, date: string, status: string) => {
+  const quickSetStatus = async (personId: string, date: string, status: string, previousStatus: string) => {
     await fetch("/api/presences/details", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ personnelId: personId, date, status }),
     });
-    showToast(t(lang, "mobile_toast_updated"));
+    showToast(t(lang, "mobile_toast_updated"), {
+      undo: { type: "status", personnelId: personId, date, oldStatus: previousStatus },
+    });
     await load();
   };
 
@@ -153,6 +193,25 @@ export default function MobileApp() {
   const absences = [...(workforce?.compagnons?.daily?.Ma ?? []), ...(workforce?.compagnons?.daily?.CP ?? [])];
   const pareto = Object.entries(indicators?.monthlyAbsenceBreakdown ?? {}).sort((a, b) => b[1] - a[1]);
   const year = new Date().getFullYear();
+
+  if (loadState === "loading" && !data) {
+    return (
+      <div className="h-[100dvh] flex items-center justify-center bg-[#f4f7f9] text-[#00205b]">
+        <p className="text-sm font-bold">{t(lang, "loading")}</p>
+      </div>
+    );
+  }
+
+  if (loadState === "error" && !data) {
+    return (
+      <div className="h-[100dvh] flex flex-col items-center justify-center gap-4 bg-[#f4f7f9] text-[#00205b] p-6">
+        <p className="text-sm font-bold text-center">{t(lang, "mobile_load_error")}</p>
+        <button type="button" onClick={() => void load()} className="px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold">
+          {t(lang, "mobile_retry")}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[100dvh] flex flex-col bg-[#f4f7f9] text-[#00205b]">
@@ -174,7 +233,21 @@ export default function MobileApp() {
           <h1 className="font-black text-lg italic">{data?.settings.appName ?? "Planning"}</h1>
           <p className="text-[10px] text-slate-500">{data?.currentUser.role}{!canEdit && ` · ${t(lang, "read_only")}`}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <select
+            value={lang}
+            onChange={(e) => {
+              const next = e.target.value as Lang;
+              setLang(next);
+              persistLang(next);
+            }}
+            className="rounded-lg border px-1 py-1 text-[10px] font-bold"
+            aria-label="Langue"
+          >
+            <option value="fr">FR</option>
+            <option value="en">EN</option>
+            <option value="pt">PT</option>
+          </select>
           <button type="button" onClick={() => setMode(mode === "production" ? "support" : "production")} aria-label={mode === "production" ? t(lang, "production") : t(lang, "support")} className="text-xs font-bold px-2 py-1 rounded-lg border">{mode === "production" ? t(lang, "production").slice(0, 4) : t(lang, "support").slice(0, 7)}</button>
           <LinkToDesktopView lang={lang} />
           <button type="button" onClick={() => signOut()} className="text-xs text-slate-500 px-2">{t(lang, "mobile_logout")}</button>
@@ -193,8 +266,9 @@ export default function MobileApp() {
         <>
           <div className="px-4 py-3 flex gap-2 overflow-x-auto items-center flex-wrap">
             <select value={selection} onChange={(e) => setSelection(e.target.value)} aria-label={t(lang, "team")} className="rounded-xl border px-3 py-2 text-xs font-bold bg-white">
-              <option value="Tous">{t(lang, "all")}</option>
-              {data?.chefsEquipe.map((c) => <option key={c.name} value={`${c.name} (${c.role})`}>{c.name}</option>)}
+              {teamOptions.map((opt) => (
+                <option key={opt} value={opt}>{opt === "Tous" ? t(lang, "all") : opt}</option>
+              ))}
             </select>
             <select value={shiftFilter} onChange={(e) => setShiftFilter(e.target.value)} aria-label={t(lang, "shift")} className="rounded-xl border px-2 py-2 text-xs font-bold bg-white">
               {["Tous", "M", "A", "N", "J"].map((s) => <option key={s} value={s}>{s}</option>)}
@@ -202,11 +276,12 @@ export default function MobileApp() {
             <button type="button" onClick={() => shiftWeek(-1)} aria-label={t(lang, "mobile_prev_week")} className="px-3 rounded-xl bg-white border text-sm">←</button>
             <button type="button" onClick={() => shiftWeek(1)} aria-label={t(lang, "mobile_next_week")} className="px-3 rounded-xl bg-white border text-sm">→</button>
           </div>
-          <main className="flex-1 overflow-y-auto px-3 pb-6 space-y-3">
+          <main className="flex-1 overflow-y-auto px-3 pb-24 space-y-3">
             {weekly?.teamMembers?.map((member) => (
               <div key={member.id} className="bg-white rounded-3xl p-4 shadow-sm">
                 <div className="font-bold text-sm mb-1">{member.prenom} {member.nom}</div>
-                <div className="text-[10px] text-slate-400 mb-2">{member.posteDeTravail}</div>
+                <div className="text-[10px] text-slate-400 mb-1">{member.posteDeTravail}</div>
+                <p className="text-[10px] text-slate-400 mb-2">{t(lang, "mobile_swipe_hint")}</p>
                 <div className="grid grid-cols-7 gap-1">
                   {weekly.weekDates.map((date) => {
                     const st = weekly.schedule[member.id]?.[date] || "";

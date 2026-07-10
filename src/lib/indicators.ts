@@ -1,4 +1,5 @@
 import { prisma } from "./db";
+import { getActiveSectors } from "./app-config";
 import { PRESENT_STATUSES } from "./constants";
 import { filterPersonnelByMode, fullName, toPersonnelRecord } from "./personnel";
 import { getPresencesForRange } from "./presences";
@@ -47,11 +48,15 @@ export async function getIndicatorsData(
     `${referenceDate.getUTCFullYear()}-12-31`
   );
 
+  const sectorsConfig = await getActiveSectors();
+
   const teamMembers = getTeamMembersFromSelections(
     parseTeamSelections(teamSelection),
     referenceDate,
     rawPersonnel,
-    presencesByPerson
+    presencesByPerson,
+    null,
+    sectorsConfig
   );
 
   const group1Roles =
