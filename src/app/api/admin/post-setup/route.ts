@@ -22,10 +22,14 @@ export async function POST(req: NextRequest) {
   const spreadsheetId = body.sheetsSpreadsheetId as string | undefined;
   const yearFilter = body.year as string | undefined;
   const demoPersonnelName = body.demoPersonnelName as string | undefined;
+  const demoUserRole = body.demoUserRole as string | undefined;
 
   try {
     if (demoPersonnelName) {
       process.env.DEMO_PERSONNEL_NAME = demoPersonnelName;
+    }
+    if (demoUserRole) {
+      process.env.DEMO_USER_ROLE = demoUserRole;
     }
 
     await linkDemoUser();
