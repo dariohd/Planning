@@ -79,18 +79,17 @@ npm run post-migrate       # lie compte démo + vérifie effectifs
 npm run generate:year      # régénère plannings pour une année (si absents)
 ```
 
-## 4. Compte démo Tristan
+## 4. Compte démo (test)
 
 Variables Vercel :
 
-| Variable | Valeur |
-|----------|--------|
-| `DEMO_USERNAME` | tristanmenager |
-| `DEMO_PASSWORD` | (secret) |
-| `DEMO_USER_ROLE` | REAP |
-| `DEMO_PERSONNEL_NAME` | Prénom Nom du REAP dans le référentiel (optionnel) |
+| Variable | Valeur recommandée |
+|----------|-------------------|
+| `DEMO_USERNAME` | identifiant de test |
+| `DEMO_PASSWORD` | (secret, jamais dans le repo) |
+| `DEMO_USER_ROLE` | `Administrateur` pour un compte de test partagé |
 
-Au prochain login, le compte est lié au collaborateur REAP correspondant.
+Pour un REAP métier réel : rôle `REAP` + `DEMO_PERSONNEL_NAME` ou `DEMO_PERSONNEL_ID` pointant vers une fiche existante.
 
 ## 5. Capa réelle
 

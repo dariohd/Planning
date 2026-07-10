@@ -1,10 +1,12 @@
 # Planning Présence — Version Vercel
 
+[![CI](https://github.com/dariohd/Planning/actions/workflows/ci.yml/badge.svg)](https://github.com/dariohd/Planning/actions/workflows/ci.yml)
+
 Migration du projet Google Apps Script vers **Next.js 16** + **PostgreSQL** + **Auth.js**, hébergé sur Vercel.
 
 L'archive d'origine (GAS) est figée dans `../PlanningGS`.
 
-**Production** : https://planning-dariohprojects.vercel.app
+**Production** : https://planning-black-xi.vercel.app
 
 ## Stack
 
@@ -126,11 +128,15 @@ Formats acceptés : clés de dates `presences` (export GAS) ou `months` compact.
 
 ## Déploiement
 
-Chaque push sur `main` redéploie. Le script `vercel-build` applique le schéma Prisma et seed si base vide.
+Chaque push sur `main` redéploie en production. Les branches et PR génèrent des **preview URLs** Vercel (environnement de test avant merge).
+
+Le script `vercel-build` applique le schéma Prisma et seed si base vide.
 
 Variables Vercel requises : `DATABASE_URL`, `AUTH_SECRET`, `DEMO_USERNAME`, `DEMO_PASSWORD`, `DEMO_USER_ROLE`.
 
-`AUTH_URL` doit être l'URL de production exacte, sans caractère BOM en tête.
+`AUTH_URL` et `NEXT_PUBLIC_APP_URL` doivent être l'URL de production exacte (`https://planning-black-xi.vercel.app`), sans caractère BOM en tête.
+
+Ne jamais committer `SEED_SECRET`, `DEMO_PASSWORD` ou `DATABASE_URL` dans le dépôt.
 
 ## Structure
 

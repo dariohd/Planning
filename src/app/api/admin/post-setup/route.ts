@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppConfig, saveAppConfig } from "@/lib/app-config";
+import { checkAdminRateLimit } from "@/lib/admin-rate-limit";
 import { importPresencesFromGasUrl } from "@/lib/import-presences";
 import { getDatabaseStats, linkDemoUser } from "@/lib/post-migrate";
 
@@ -14,6 +15,9 @@ function requireSeed(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = checkAdminRateLimit(req, "post-setup", 20);
+  if (limited) return limited;
+
   const denied = requireSeed(req);
   if (denied) return denied;
 

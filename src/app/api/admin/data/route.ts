@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkAdminRateLimit } from "@/lib/admin-rate-limit";
 import { requireSession } from "@/lib/api-auth";
 import { deleteAllData } from "@/lib/data-snapshot";
 
 export async function DELETE(req: NextRequest) {
+  const limited = checkAdminRateLimit(req, "admin-data-delete", 5);
+  if (limited) return limited;
+
   const authResult = await requireSession();
   if ("error" in authResult && authResult.error) return authResult.error;
   if (authResult.session!.user!.role !== "Administrateur") {

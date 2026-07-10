@@ -1,0 +1,13 @@
+{
+  "name": "Planning Présence",
+  "short_name": "Planning",
+  "description": "Gestion des présences et plannings d'équipe",
+  "start_url": "/mobile",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#00205b",
+  "theme_color": "#00205b",
+  "lang": "fr",
+  "categories": ["productivity", "business"]
+}
