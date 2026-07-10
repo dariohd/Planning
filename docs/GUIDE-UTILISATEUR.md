@@ -134,8 +134,8 @@ L'application utilise la **base en ligne** pour l'affichage quotidien. Google Sh
 
 ## Aide intégrée
 
+- **Bulle** (bulle en bas à droite) : assistant IA pour les questions d'usage.
 - **Guide** (en-tête) : mode d'emploi selon le rôle.
-- **Assistant** (bulle en bas à droite) : FAQ.
 - Bandeau **Premiers pas** au premier login (masquable).
 
 ---

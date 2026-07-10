@@ -21,7 +21,6 @@ import { TeamViewSection } from "@/components/desktop/TeamViewSection";
 import { IndividualViewSection } from "@/components/desktop/IndividualViewSection";
 import { useDesktopData } from "@/hooks/useDesktopData";
 import { t, type Lang } from "@/lib/i18n";
-import { HelpChatbot } from "@/components/shared/HelpChatbot";
 import { useToast } from "@/components/shared/ToastProvider";
 import { signOut, useSession } from "next-auth/react";
 
@@ -517,7 +516,6 @@ export default function DesktopApp() {
         {view === "indicateurs" && <IndicatorsView key={indicatorDate} mode={mode} selection={selectionParam} date={indicatorDate} teamOptions={teamOptions} />}
         {view === "capa" && <CapaView key={weekStart} mode={mode} weekStart={weekStart} isAdmin={isAdmin} />}
       </main>
-      <HelpChatbot lang={lang} />
     </div>
   );
 }
