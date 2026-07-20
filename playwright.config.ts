@@ -29,6 +29,9 @@ export default defineConfig({
       DEMO_USERNAME: process.env.DEMO_USERNAME ?? "e2e-admin",
       DEMO_PASSWORD: process.env.DEMO_PASSWORD ?? "e2e-test-pass-2026",
       DEMO_USER_ROLE: process.env.DEMO_USER_ROLE ?? "Administrateur",
+      DEMO_EXTRA_ACCOUNTS:
+        process.env.DEMO_EXTRA_ACCOUNTS ??
+        "e2e-lecteur:e2e-test-pass-2026:Lecteur|e2e-denied:e2e-test-pass-2026:Non Autorisé",
       ALLOW_DEV_LOGIN: "true",
       DEV_USER_EMAIL: "admin@local.dev",
       DEV_USER_ROLE: "Administrateur",

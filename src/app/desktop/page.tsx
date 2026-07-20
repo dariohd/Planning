@@ -422,6 +422,7 @@ export default function DesktopApp() {
         }}
         canEdit={canEdit}
         missions={data?.settings.missions ?? ["Mi"]}
+        lang={lang}
         onSave={savePresenceDetails}
         onClose={() => setEditor(null)}
       />
@@ -429,6 +430,7 @@ export default function DesktopApp() {
       <MassUpdateModal
         open={massOpen}
         members={teamMembersForMass}
+        lang={lang}
         onApply={applyMassUpdate}
         onClose={() => setMassOpen(false)}
       />

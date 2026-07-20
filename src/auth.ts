@@ -3,7 +3,7 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import type { Provider } from "next-auth/providers";
 import { authConfig } from "@/auth.config";
-import { envValue, isDemoLoginConfigured, safeEqual } from "@/lib/demo-auth";
+import { envValue, isDemoLoginConfigured, parseDemoExtraAccounts, safeEqual } from "@/lib/demo-auth";
 import { prisma } from "@/lib/db";
 import { nameFromEmail } from "@/lib/permissions";
 
@@ -62,6 +62,23 @@ const providers: Provider[] = [
           console.error("Demo login DB sync skipped:", e);
         }
         return { id: email, email, name: username, role };
+      }
+
+      const extra = parseDemoExtraAccounts().find(
+        (a) => safeEqual(username, a.username) && safeEqual(password, a.password)
+      );
+      if (extra) {
+        const email = `${extra.username.toLowerCase()}@demo.planning.local`;
+        try {
+          await prisma.user.upsert({
+            where: { email },
+            create: { email, role: extra.role, name: extra.username },
+            update: { role: extra.role, name: extra.username },
+          });
+        } catch (e) {
+          console.error("Demo extra login DB sync skipped:", e);
+        }
+        return { id: email, email, name: extra.username, role: extra.role };
       }
 
       if (process.env.NODE_ENV !== "production" || process.env.ALLOW_DEV_LOGIN === "true") {

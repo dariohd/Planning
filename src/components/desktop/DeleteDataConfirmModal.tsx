@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 type Props = {
   open: boolean;
@@ -12,6 +13,10 @@ export function DeleteDataConfirmModal({ open, onClose, onConfirm }: Props) {
   const [exportFirst, setExportFirst] = useState(true);
   const [busy, setBusy] = useState(false);
   const [typed, setTyped] = useState("");
+  const handleClose = useCallback(() => {
+    if (!busy) onClose();
+  }, [busy, onClose]);
+  const dialogRef = useModalA11y(open, handleClose);
 
   if (!open) return null;
 
@@ -30,9 +35,17 @@ export function DeleteDataConfirmModal({ open, onClose, onConfirm }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="glass rounded-3xl p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-black text-red-700 text-lg mb-2">Supprimer toutes les données</h3>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={handleClose}>
+      <div
+        ref={dialogRef}
+        className="glass rounded-3xl p-6 max-w-md w-full outline-none"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-data-title"
+        tabIndex={-1}
+      >
+        <h3 id="delete-data-title" className="font-black text-red-700 text-lg mb-2">Supprimer toutes les données</h3>
         <p className="text-sm text-slate-600 mb-4">
           Cette action efface le personnel, les présences, les utilisateurs (sauf votre compte), la capa réelle et la configuration.
           Elle est irréversible.
@@ -65,7 +78,7 @@ export function DeleteDataConfirmModal({ open, onClose, onConfirm }: Props) {
         </label>
 
         <div className="flex gap-2 justify-end">
-          <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 rounded-xl border text-sm font-bold">
+          <button type="button" onClick={handleClose} disabled={busy} className="px-4 py-2 rounded-xl border text-sm font-bold">
             Annuler
           </button>
           <button

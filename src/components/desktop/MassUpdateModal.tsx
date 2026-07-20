@@ -5,10 +5,12 @@ import { ALL_STATUSES } from "@/lib/constants";
 import type { PersonnelRecord } from "@/lib/types";
 import { fullName } from "@/lib/personnel";
 import { useModalA11y } from "@/hooks/useModalA11y";
+import { t, type Lang } from "@/lib/i18n";
 
 type Props = {
   open: boolean;
   members: PersonnelRecord[];
+  lang?: Lang;
   onApply: (data: {
     personnelIds: string[];
     startDate: string;
@@ -19,7 +21,7 @@ type Props = {
   onClose: () => void;
 };
 
-export function MassUpdateModal({ open, members, onApply, onClose }: Props) {
+export function MassUpdateModal({ open, members, lang = "fr", onApply, onClose }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -52,7 +54,7 @@ export function MassUpdateModal({ open, members, onApply, onClose }: Props) {
         aria-labelledby="mass-update-title"
         tabIndex={-1}
       >
-        <h3 id="mass-update-title" className="font-black text-[#00205b] mb-4">Modification groupée</h3>
+        <h3 id="mass-update-title" className="font-black text-[#00205b] mb-4">{t(lang, "mass_update")}</h3>
 
         <div className="flex flex-wrap gap-2 mb-4">
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
@@ -64,13 +66,13 @@ export function MassUpdateModal({ open, members, onApply, onClose }: Props) {
             ))}
           </select>
           {status === "Mi" && (
-            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Lieu" className="rounded-xl border px-3 py-2 text-sm" />
+            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder={t(lang, "presence_custom_place")} className="rounded-xl border px-3 py-2 text-sm" />
           )}
         </div>
 
         <div className="flex gap-2 mb-2">
-          <button type="button" onClick={selectAll} className="text-xs font-bold underline">Tout sélectionner</button>
-          <span className="text-xs text-slate-500">{selected.size} sélectionné(s)</span>
+          <button type="button" onClick={selectAll} className="text-xs font-bold underline">{t(lang, "mass_select_all")}</button>
+          <span className="text-xs text-slate-500">{selected.size} {t(lang, "mass_selected")}</span>
         </div>
 
         <div className="max-h-48 overflow-y-auto border rounded-2xl p-2 mb-4 space-y-1">
@@ -83,7 +85,7 @@ export function MassUpdateModal({ open, members, onApply, onClose }: Props) {
         </div>
 
         <div className="flex gap-2 justify-end">
-          <button type="button" onClick={handleClose} className="px-4 py-2 rounded-xl border text-sm font-bold">Annuler</button>
+          <button type="button" onClick={handleClose} className="px-4 py-2 rounded-xl border text-sm font-bold">{t(lang, "cancel")}</button>
           <button
             type="button"
             disabled={!startDate || !endDate || selected.size === 0}
@@ -99,7 +101,7 @@ export function MassUpdateModal({ open, members, onApply, onClose }: Props) {
             }}
             className="px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold disabled:opacity-40"
           >
-            Appliquer
+            {t(lang, "apply")}
           </button>
         </div>
       </div>

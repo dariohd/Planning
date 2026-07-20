@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/api-auth";
+import { requireAdmin, requireSession } from "@/lib/api-auth";
 import { prisma } from "@/lib/db";
 import { ensureModificationAllowed, touchLastModified } from "@/lib/permissions";
 
@@ -44,12 +44,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(req: NextRequest, { params }: Params) {
-  const authResult = await requireSession();
+  const authResult = await requireAdmin();
   if ("error" in authResult && authResult.error) return authResult.error;
-
-  if (authResult.session!.user!.role !== "Administrateur") {
-    return NextResponse.json({ error: "Administrateur requis." }, { status: 403 });
-  }
 
   const { id } = await params;
   await prisma.presence.deleteMany({ where: { personnelId: id } });

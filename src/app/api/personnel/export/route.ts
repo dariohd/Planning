@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/api-auth";
+import { requireAdmin } from "@/lib/api-auth";
 import { prisma } from "@/lib/db";
 import { toPersonnelRecord } from "@/lib/personnel";
 
 export async function GET(req: NextRequest) {
-  const authResult = await requireSession();
+  const authResult = await requireAdmin();
   if ("error" in authResult && authResult.error) return authResult.error;
-
-  if (authResult.session!.user!.role !== "Administrateur") {
-    return NextResponse.json({ error: "Administrateur requis." }, { status: 403 });
-  }
 
   const rolesParam = req.nextUrl.searchParams.get("roles");
   const roles = rolesParam ? rolesParam.split(",").map((r) => r.trim()).filter(Boolean) : null;

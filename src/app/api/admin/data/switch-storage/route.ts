@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/api-auth";
+import { requireAdmin } from "@/lib/api-auth";
 import { saveAppConfig } from "@/lib/app-config";
 import { exportDataSnapshot, importDataSnapshot } from "@/lib/data-snapshot";
 import { pullSnapshotFromSheets, pushSnapshotToSheets } from "@/lib/google-sheets";
@@ -8,11 +8,8 @@ import { touchLastModified } from "@/lib/permissions";
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireSession();
+  const authResult = await requireAdmin();
   if ("error" in authResult && authResult.error) return authResult.error;
-  if (authResult.session!.user!.role !== "Administrateur") {
-    return NextResponse.json({ error: "Administrateur requis." }, { status: 403 });
-  }
 
   const body = await req.json();
   const target = body.target as "database" | "google_sheets";

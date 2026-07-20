@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api-auth";
+import { requireAdmin } from "@/lib/api-auth";
 import { exportDataSnapshot, snapshotToJson } from "@/lib/data-snapshot";
 
 export async function GET() {
-  const authResult = await requireSession();
+  const authResult = await requireAdmin();
   if ("error" in authResult && authResult.error) return authResult.error;
-  if (authResult.session!.user!.role !== "Administrateur") {
-    return NextResponse.json({ error: "Administrateur requis." }, { status: 403 });
-  }
 
   const snapshot = await exportDataSnapshot();
   const json = snapshotToJson(snapshot);

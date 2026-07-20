@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 type StorageMode = "database" | "google_sheets";
 
@@ -51,6 +52,10 @@ export function StorageSwitchModal({
   const [syncData, setSyncData] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const handleClose = useCallback(() => {
+    if (!busy) onClose();
+  }, [busy, onClose]);
+  const dialogRef = useModalA11y(open && target !== current, handleClose);
 
   if (!open || target === current) return null;
 
@@ -81,9 +86,17 @@ export function StorageSwitchModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="glass rounded-3xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-black text-[#00205b] text-lg mb-2">{copy.title}</h3>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={handleClose}>
+      <div
+        ref={dialogRef}
+        className="glass rounded-3xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto outline-none"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="storage-switch-title"
+        tabIndex={-1}
+      >
+        <h3 id="storage-switch-title" className="font-black text-[#00205b] text-lg mb-2">{copy.title}</h3>
         <p className="text-sm text-slate-600 mb-4 leading-relaxed">{copy.lead}</p>
 
         <label className="flex items-start gap-3 text-sm font-bold mb-3 cursor-pointer">
@@ -120,10 +133,10 @@ export function StorageSwitchModal({
           </div>
         )}
 
-        {error && <p className="text-xs font-bold text-red-600 mb-3">{error}</p>}
+        {error && <p className="text-xs font-bold text-red-600 mb-3" role="alert">{error}</p>}
 
         <div className="flex gap-2 justify-end">
-          <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 rounded-xl border text-sm font-bold">
+          <button type="button" onClick={handleClose} disabled={busy} className="px-4 py-2 rounded-xl border text-sm font-bold">
             Annuler
           </button>
           <button

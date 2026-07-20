@@ -2,8 +2,9 @@
 
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useMemo, useState } from "react";
 import { safeCallbackUrl } from "@/lib/safe-callback-url";
+import { t, type Lang } from "@/lib/i18n";
 
 type Props = {
   credentialsFormEnabled: boolean;
@@ -11,9 +12,17 @@ type Props = {
   googleLoginEnabled: boolean;
 };
 
+function detectLang(): Lang {
+  if (typeof navigator === "undefined") return "fr";
+  const code = (navigator.language || "fr").slice(0, 2).toLowerCase();
+  if (code === "en" || code === "pt") return code;
+  return "fr";
+}
+
 function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnabled }: Props) {
   const params = useSearchParams();
   const callbackUrl = safeCallbackUrl(params.get("callbackUrl"), "/desktop");
+  const lang = useMemo(() => detectLang(), []);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +43,7 @@ function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnable
     setLoading(false);
 
     if (result?.error) {
-      setError("Identifiant ou mot de passe incorrect.");
+      setError(t(lang, "login_error"));
       return;
     }
 
@@ -45,16 +54,16 @@ function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnable
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#00205b] to-[#04122b] p-6">
       <div className="glass rounded-3xl p-10 max-w-md w-full">
         <h1 className="text-3xl font-black italic uppercase tracking-tight text-[#00205b] mb-2 text-center">
-          Planning Présence
+          {t(lang, "planning")}
         </h1>
-        <p className="text-sm text-slate-500 mb-8 text-center">Connexion requise</p>
+        <p className="text-sm text-slate-500 mb-8 text-center">{t(lang, "login_required")}</p>
 
         <div className="space-y-4">
           {credentialsFormEnabled && (
             <form onSubmit={handleDemoSubmit} className="space-y-3 text-left">
               <div>
                 <label htmlFor="username" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Identifiant
+                  {t(lang, "username")}
                 </label>
                 <input
                   id="username"
@@ -69,7 +78,7 @@ function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnable
               </div>
               <div>
                 <label htmlFor="password" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Mot de passe
+                  {t(lang, "password")}
                 </label>
                 <input
                   id="password"
@@ -87,7 +96,7 @@ function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnable
                 disabled={loading}
                 className="w-full py-3 rounded-2xl bg-[#00205b] text-white font-bold hover:bg-[#00b5e2] transition-colors disabled:opacity-60"
               >
-                {loading ? "Connexion..." : "Se connecter"}
+                {loading ? t(lang, "login_loading") : t(lang, "login")}
               </button>
             </form>
           )}
@@ -97,7 +106,7 @@ function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnable
               {credentialsFormEnabled && demoLoginEnabled && (
                 <div className="flex items-center gap-3 text-xs text-slate-400 uppercase tracking-widest">
                   <span className="h-px flex-1 bg-slate-200" />
-                  ou
+                  {t(lang, "login_or")}
                   <span className="h-px flex-1 bg-slate-200" />
                 </div>
               )}
@@ -106,7 +115,7 @@ function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnable
                 onClick={() => signIn("google", { callbackUrl })}
                 className="w-full py-3 rounded-2xl border-2 border-[#00205b] text-[#00205b] font-bold hover:bg-slate-50 transition-colors"
               >
-                Continuer avec Google
+                {t(lang, "google")}
               </button>
             </>
           )}

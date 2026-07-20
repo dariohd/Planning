@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { ALL_STATUSES, STATUS_BG, STATUS_LABELS } from "@/lib/constants";
 import { useModalA11y } from "@/hooks/useModalA11y";
+import { t, type Lang } from "@/lib/i18n";
 
 type Props = {
   open: boolean;
@@ -11,6 +12,7 @@ type Props = {
   current: { status: string; comment?: string; hs?: string; location?: string };
   canEdit: boolean;
   missions?: string[];
+  lang?: Lang;
   onSave: (data: {
     status: string;
     comment?: string;
@@ -20,7 +22,16 @@ type Props = {
   onClose: () => void;
 };
 
-export function PresenceEditor({ open, date, current, canEdit, missions = ["Mi"], onSave, onClose }: Props) {
+export function PresenceEditor({
+  open,
+  date,
+  current,
+  canEdit,
+  missions = ["Mi"],
+  lang = "fr",
+  onSave,
+  onClose,
+}: Props) {
   const [status, setStatus] = useState(current.status);
   const [comment, setComment] = useState(current.comment ?? "");
   const [hs, setHs] = useState(current.hs ?? "");
@@ -41,7 +52,7 @@ export function PresenceEditor({ open, date, current, canEdit, missions = ["Mi"]
         aria-labelledby="presence-editor-title"
         tabIndex={-1}
       >
-        <p id="presence-editor-title" className="text-sm font-bold text-[#00205b] mb-1">Présence</p>
+        <p id="presence-editor-title" className="text-sm font-bold text-[#00205b] mb-1">{t(lang, "presence_title")}</p>
         <p className="text-xs text-slate-500 mb-4">{date}</p>
 
         <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-4">
@@ -64,7 +75,7 @@ export function PresenceEditor({ open, date, current, canEdit, missions = ["Mi"]
 
         {(status === "Mi" || location) && (
           <label className="block mb-3">
-            <span className="text-xs font-bold text-slate-500">Lieu mission</span>
+            <span className="text-xs font-bold text-slate-500">{t(lang, "presence_mission_place")}</span>
             <div className="flex flex-wrap gap-1 mt-1 mb-2">
               {missions.map((m) => (
                 <button
@@ -83,13 +94,13 @@ export function PresenceEditor({ open, date, current, canEdit, missions = ["Mi"]
               disabled={!canEdit}
               onChange={(e) => setLocation(e.target.value)}
               className="w-full rounded-xl border px-3 py-2 text-sm"
-              placeholder="Lieu personnalisé"
+              placeholder={t(lang, "presence_custom_place")}
             />
           </label>
         )}
 
         <label className="block mb-3">
-          <span className="text-xs font-bold text-slate-500">Commentaire</span>
+          <span className="text-xs font-bold text-slate-500">{t(lang, "presence_comment")}</span>
           <input
             value={comment}
             disabled={!canEdit}
@@ -99,7 +110,7 @@ export function PresenceEditor({ open, date, current, canEdit, missions = ["Mi"]
         </label>
 
         <label className="block mb-4">
-          <span className="text-xs font-bold text-slate-500">Heures sup.</span>
+          <span className="text-xs font-bold text-slate-500">{t(lang, "presence_hs")}</span>
           <input
             value={hs}
             disabled={!canEdit}
@@ -111,7 +122,7 @@ export function PresenceEditor({ open, date, current, canEdit, missions = ["Mi"]
 
         <div className="flex gap-2 justify-end">
           <button type="button" onClick={handleClose} className="px-4 py-2 rounded-xl border text-sm font-bold">
-            Fermer
+            {t(lang, "close")}
           </button>
           {canEdit && (
             <button
@@ -119,7 +130,7 @@ export function PresenceEditor({ open, date, current, canEdit, missions = ["Mi"]
               onClick={() => onSave({ status, comment, hs, location: status === "Mi" ? location : undefined })}
               className="px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold"
             >
-              Enregistrer
+              {t(lang, "settings_save")}
             </button>
           )}
         </div>
