@@ -164,6 +164,8 @@ export default function DesktopApp() {
     return () => clearInterval(interval);
   }, [view, pollUpdates, refreshTeam]);
 
+  const hasPersonnel = (data?.personnel.length ?? 0) > 0;
+
   const hasTeamPresences = useMemo(() => {
     if (monthly?.schedule) {
       return Object.values(monthly.schedule).some((days) => Object.keys(days).length > 0);
@@ -447,6 +449,7 @@ export default function DesktopApp() {
         isAdmin={isAdmin}
         canEdit={canEdit}
         hasPresences={hasTeamPresences}
+        hasPersonnel={hasPersonnel}
         onOpenGuide={() => setGuideOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
@@ -472,6 +475,7 @@ export default function DesktopApp() {
             canEdit={canEdit}
             isAdmin={isAdmin}
             hasTeamPresences={hasTeamPresences}
+            hasPersonnel={hasPersonnel}
             weekly={weekly}
             monthly={monthly}
             calendarMonth={calendarMonth}
@@ -481,6 +485,7 @@ export default function DesktopApp() {
             onShiftWeek={shiftWeek}
             onShiftMonth={shiftMonth}
             onGenerateYear={() => generateYear(calendarMonth.year)}
+            onAddPerson={() => { setSelectedPerson(null); setPersonFormOpen(true); }}
             onCellClick={openCellEditor}
           />
         )}

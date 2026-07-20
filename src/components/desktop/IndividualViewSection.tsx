@@ -118,22 +118,38 @@ export function IndividualViewSection({
             });
           }}
         />
-        <ul className="space-y-2">
-          {filteredPersonnel.map((p) => (
-            <li key={p.id}>
+        {data.personnel.length === 0 ? (
+          <div className="rounded-2xl border-2 border-dashed border-[#00b5e2]/50 bg-[#00b5e2]/5 p-6 text-center">
+            <p className="text-sm font-black text-[#00205b] mb-1">{t(lang, "empty_personnel_title")}</p>
+            <p className="text-xs text-slate-600 mb-4">{t(lang, "empty_personnel_body")}</p>
+            {isAdmin && (
               <button
                 type="button"
-                data-person-item
-                data-search={`${p.nom} ${p.prenom}`.toLowerCase()}
-                onClick={() => onSelectPerson(p)}
-                className={`w-full text-left p-3 rounded-2xl border transition ${selectedPerson?.id === p.id ? "border-[#00b5e2] bg-white shadow" : "border-transparent hover:bg-white/70"}`}
+                onClick={onAddPerson}
+                className="px-3 py-1.5 rounded-lg bg-[#00205b] text-white text-xs font-bold"
               >
-                <div className="font-bold text-sm">{p.nom} {p.prenom}</div>
-                <div className="text-xs text-slate-500">{p.role} — {p.section}</div>
+                {t(lang, "add_person")}
               </button>
-            </li>
-          ))}
-        </ul>
+            )}
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {filteredPersonnel.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  data-person-item
+                  data-search={`${p.nom} ${p.prenom}`.toLowerCase()}
+                  onClick={() => onSelectPerson(p)}
+                  className={`w-full text-left p-3 rounded-2xl border transition ${selectedPerson?.id === p.id ? "border-[#00b5e2] bg-white shadow" : "border-transparent hover:bg-white/70"}`}
+                >
+                  <div className="font-bold text-sm">{p.nom} {p.prenom}</div>
+                  <div className="text-xs text-slate-500">{p.role} — {p.section}</div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </aside>
 
       <div className="lg:col-span-8 glass rounded-3xl p-6">

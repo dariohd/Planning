@@ -10,6 +10,7 @@ type Props = {
   isAdmin: boolean;
   canEdit: boolean;
   hasPresences: boolean;
+  hasPersonnel: boolean;
   onOpenGuide: () => void;
   onOpenSettings?: () => void;
 };
@@ -19,6 +20,7 @@ export function ManagerGuideBanner({
   isAdmin,
   canEdit,
   hasPresences,
+  hasPersonnel,
   onOpenGuide,
   onOpenSettings,
 }: Props) {
@@ -41,7 +43,10 @@ export function ManagerGuideBanner({
           <ol className="text-xs text-slate-600 space-y-1 list-decimal list-inside">
             <li>{t(lang, "guide_step_team")}</li>
             <li>{t(lang, "guide_step_individual")}</li>
-            {!hasPresences && isAdmin && (
+            {!hasPersonnel && isAdmin && (
+              <li className="font-bold text-[#00205b]">{t(lang, "guide_step_add_person")}</li>
+            )}
+            {hasPersonnel && !hasPresences && isAdmin && (
               <li className="font-bold text-[#00205b]">{t(lang, "guide_step_generate")}</li>
             )}
             {isAdmin && <li>{t(lang, "guide_step_data")}</li>}

@@ -6,8 +6,9 @@ Migration du projet Google Apps Script vers **Next.js 16** + **PostgreSQL** + **
 
 L'archive d'origine (GAS) est figée dans `../PlanningGS`.
 
-**Production** (les deux URLs pointent sur le même déploiement) :
+**Production** (ces URLs pointent sur le même déploiement) :
 
+- https://planning-presence-atelier.vercel.app
 - https://planning-black-xi.vercel.app
 - https://planning-dariohprojects.vercel.app
 

@@ -32,6 +32,7 @@ type Props = {
   canEdit: boolean;
   isAdmin: boolean;
   hasTeamPresences: boolean;
+  hasPersonnel: boolean;
   weekly: WeeklySchedule | null;
   monthly: MonthlyData | null;
   calendarMonth: { year: number; month: number };
@@ -41,6 +42,7 @@ type Props = {
   onShiftWeek: (delta: number) => void;
   onShiftMonth: (delta: number) => void;
   onGenerateYear: () => void;
+  onAddPerson: () => void;
   onCellClick: (personnelId: string, date: string, status: string, details?: DayPresence) => void;
 };
 
@@ -59,6 +61,7 @@ export function TeamViewSection({
   canEdit,
   isAdmin,
   hasTeamPresences,
+  hasPersonnel,
   weekly,
   monthly,
   calendarMonth,
@@ -68,6 +71,7 @@ export function TeamViewSection({
   onShiftWeek,
   onShiftMonth,
   onGenerateYear,
+  onAddPerson,
   onCellClick,
 }: Props) {
   return (
@@ -105,7 +109,13 @@ export function TeamViewSection({
       <StatusLegend lang={lang} className="mb-4" />
 
       {!hasTeamPresences ? (
-        <EmptyTeamState lang={lang} isAdmin={isAdmin} onGenerateYear={onGenerateYear} />
+        <EmptyTeamState
+          lang={lang}
+          isAdmin={isAdmin}
+          hasPersonnel={hasPersonnel}
+          onGenerateYear={onGenerateYear}
+          onAddPerson={onAddPerson}
+        />
       ) : teamPeriod === "month" && monthly ? (
         <TeamMonthlyTable
           monthDates={monthly.monthDates}
