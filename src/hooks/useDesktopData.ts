@@ -7,16 +7,19 @@ export function useDesktopData(mode: AppMode, showArchived: boolean) {
   const [data, setData] = useState<InitialData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
   const lastModifiedRef = useRef<string>("0");
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setAccessDenied(false);
     const archived = showArchived ? "&archived=true" : "";
     const res = await fetch(`/api/initial-data?mode=${mode}${archived}`);
     const json = await res.json();
     if (!res.ok) {
       setError(json.error ?? "Erreur de chargement");
+      setAccessDenied(res.status === 403);
       setData(null);
     } else {
       setData(json);
@@ -45,5 +48,5 @@ export function useDesktopData(mode: AppMode, showArchived: boolean) {
     [mode]
   );
 
-  return { data, loading, error, loadInitial, pollUpdates, lastModifiedRef };
+  return { data, loading, error, accessDenied, loadInitial, pollUpdates, lastModifiedRef };
 }

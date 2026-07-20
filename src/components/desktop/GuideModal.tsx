@@ -1,6 +1,8 @@
 "use client";
 
+import { useCallback } from "react";
 import { t, type Lang } from "@/lib/i18n";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 type Props = {
   open: boolean;
@@ -10,6 +12,9 @@ type Props = {
 };
 
 export function GuideModal({ open, lang, userRole, onClose }: Props) {
+  const handleClose = useCallback(() => onClose(), [onClose]);
+  const dialogRef = useModalA11y(open, handleClose);
+
   if (!open) return null;
 
   const isReap = userRole === "REAP";
@@ -43,12 +48,17 @@ export function GuideModal({ open, lang, userRole, onClose }: Props) {
     : [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={handleClose}>
       <div
-        className="glass rounded-3xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+        ref={dialogRef}
+        className="glass rounded-3xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto outline-none"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="guide-modal-title"
+        tabIndex={-1}
       >
-        <h3 className="text-xl font-black text-[#00205b] mb-1">{t(lang, "guide_modal_title")}</h3>
+        <h3 id="guide-modal-title" className="text-xl font-black text-[#00205b] mb-1">{t(lang, "guide_modal_title")}</h3>
         <p className="text-xs text-slate-500 mb-4">{t(lang, "guide_modal_subtitle")}</p>
 
         <p className="text-xs font-bold text-[#00205b] mb-2">{t(lang, "guide_section_basics")}</p>
@@ -88,7 +98,7 @@ export function GuideModal({ open, lang, userRole, onClose }: Props) {
         )}
 
         <p className="text-[11px] text-slate-500 mb-4 rounded-xl bg-slate-50 border p-3">{t(lang, "guide_modal_note")}</p>
-        <button type="button" onClick={onClose} className="w-full px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold">
+        <button type="button" onClick={handleClose} className="w-full px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold">
           {t(lang, "guide_dismiss")}
         </button>
       </div>

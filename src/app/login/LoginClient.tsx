@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
+import { safeCallbackUrl } from "@/lib/safe-callback-url";
 
 type Props = {
   credentialsFormEnabled: boolean;
@@ -12,7 +13,7 @@ type Props = {
 
 function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnabled }: Props) {
   const params = useSearchParams();
-  const callbackUrl = params.get("callbackUrl") ?? "/desktop";
+  const callbackUrl = safeCallbackUrl(params.get("callbackUrl"), "/desktop");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +38,7 @@ function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnable
       return;
     }
 
-    window.location.href = callbackUrl;
+    window.location.assign(callbackUrl);
   };
 
   return (
@@ -80,7 +81,7 @@ function LoginForm({ credentialsFormEnabled, demoLoginEnabled, googleLoginEnable
                   required
                 />
               </div>
-              {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
+              {error && <p className="text-sm text-red-600 font-medium" role="alert">{error}</p>}
               <button
                 type="submit"
                 disabled={loading}

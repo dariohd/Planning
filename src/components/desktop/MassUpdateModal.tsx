@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { ALL_STATUSES } from "@/lib/constants";
 import type { PersonnelRecord } from "@/lib/types";
 import { fullName } from "@/lib/personnel";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 type Props = {
   open: boolean;
@@ -24,6 +25,8 @@ export function MassUpdateModal({ open, members, onApply, onClose }: Props) {
   const [endDate, setEndDate] = useState("");
   const [status, setStatus] = useState("CP");
   const [location, setLocation] = useState("");
+  const handleClose = useCallback(() => onClose(), [onClose]);
+  const dialogRef = useModalA11y(open, handleClose);
 
   if (!open) return null;
 
@@ -39,12 +42,17 @@ export function MassUpdateModal({ open, members, onApply, onClose }: Props) {
   const selectAll = () => setSelected(new Set(members.map((m) => m.id)));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={handleClose}>
       <div
-        className="glass rounded-3xl p-5 max-w-2xl w-full max-h-[85vh] overflow-y-auto"
+        ref={dialogRef}
+        className="glass rounded-3xl p-5 max-w-2xl w-full max-h-[85vh] overflow-y-auto outline-none"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mass-update-title"
+        tabIndex={-1}
       >
-        <h3 className="font-black text-[#00205b] mb-4">Modification groupée</h3>
+        <h3 id="mass-update-title" className="font-black text-[#00205b] mb-4">Modification groupée</h3>
 
         <div className="flex flex-wrap gap-2 mb-4">
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
@@ -75,7 +83,7 @@ export function MassUpdateModal({ open, members, onApply, onClose }: Props) {
         </div>
 
         <div className="flex gap-2 justify-end">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border text-sm font-bold">Annuler</button>
+          <button type="button" onClick={handleClose} className="px-4 py-2 rounded-xl border text-sm font-bold">Annuler</button>
           <button
             type="button"
             disabled={!startDate || !endDate || selected.size === 0}
@@ -87,7 +95,7 @@ export function MassUpdateModal({ open, members, onApply, onClose }: Props) {
                 status,
                 location: status === "Mi" ? location : undefined,
               });
-              onClose();
+              handleClose();
             }}
             className="px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold disabled:opacity-40"
           >

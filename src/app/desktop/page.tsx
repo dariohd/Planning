@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import type { AppMode, DayPresence, PersonnelRecord, WeeklySchedule } from "@/lib/types";
 import { computeIndividualCounters } from "@/lib/counters";
 import { DISPLAY_POSTES } from "@/lib/constants";
@@ -10,8 +11,6 @@ import { getMondayOfWeek } from "@/lib/shifts";
 import { mapTeamSelectionForApi, sectorOptionLabel } from "@/lib/sectors";
 import { fullName } from "@/lib/personnel";
 import { PresenceEditor } from "@/components/shared/PresenceEditor";
-import { IndicatorsView } from "@/components/desktop/IndicatorsView";
-import { CapaView } from "@/components/desktop/CapaView";
 import { MassUpdateModal } from "@/components/desktop/MassUpdateModal";
 import { PersonnelForm } from "@/components/desktop/PersonnelForm";
 import { SettingsModal } from "@/components/desktop/SettingsModal";
@@ -20,10 +19,21 @@ import { ManagerGuideBanner } from "@/components/desktop/ManagerGuideBanner";
 import { GuideModal } from "@/components/desktop/GuideModal";
 import { TeamViewSection } from "@/components/desktop/TeamViewSection";
 import { IndividualViewSection } from "@/components/desktop/IndividualViewSection";
+import { AccessDenied } from "@/components/shared/AccessDenied";
+import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { useDesktopData } from "@/hooks/useDesktopData";
 import { t, type Lang } from "@/lib/i18n";
 import { useToast } from "@/components/shared/ToastProvider";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+
+const IndicatorsView = dynamic(
+  () => import("@/components/desktop/IndicatorsView").then((m) => ({ default: m.IndicatorsView })),
+  { ssr: false, loading: () => <div className="p-8 text-sm font-bold text-slate-500">…</div> }
+);
+const CapaView = dynamic(
+  () => import("@/components/desktop/CapaView").then((m) => ({ default: m.CapaView })),
+  { ssr: false, loading: () => <div className="p-8 text-sm font-bold text-slate-500">…</div> }
+);
 
 type View = "equipe" | "individuelle" | "indicateurs" | "capa";
 type TeamPeriod = "week" | "month";
@@ -71,7 +81,7 @@ export default function DesktopApp() {
   );
   const [view, setView] = useState<View>("equipe");
   const [showArchived, setShowArchived] = useState(false);
-  const { data, loading, error, loadInitial, pollUpdates } = useDesktopData(mode, showArchived);
+  const { data, loading, error, accessDenied, loadInitial, pollUpdates } = useDesktopData(mode, showArchived);
   const [weekStart, setWeekStart] = useState(getMondayOfWeek());
   const [weekly, setWeekly] = useState<WeeklySchedule | null>(null);
   const [monthly, setMonthly] = useState<MonthlyData | null>(null);
@@ -222,7 +232,7 @@ export default function DesktopApp() {
   }) => {
     if (!editor || !canEdit) return;
     const old = { ...editor };
-    await fetch("/api/presences/details", {
+    const res = await fetch("/api/presences/details", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -234,12 +244,17 @@ export default function DesktopApp() {
         location: payload.location,
       }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast((err as { error?: string }).error ?? t(lang, "save_failed"), { error: true });
+      return;
+    }
     setEditor(null);
     refreshTeam();
     if (selectedPerson?.id === editor.personnelId) {
       loadPersonYear(editor.personnelId, calendarMonth.year);
     }
-    showToast("Statut enregistré", {
+    showToast(t(lang, "save_ok"), {
       undo: {
         type: "details",
         personnelId: old.personnelId,
@@ -254,7 +269,7 @@ export default function DesktopApp() {
 
   const applyRange = async () => {
     if (!selectedPerson || !rangeStart || !rangeEnd || !canEdit) return;
-    await fetch("/api/presences/range", {
+    const res = await fetch("/api/presences/range", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -264,8 +279,13 @@ export default function DesktopApp() {
         status: rangeStatus,
       }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast((err as { error?: string }).error ?? t(lang, "range_failed"), { error: true });
+      return;
+    }
     loadPersonYear(selectedPerson.id, calendarMonth.year);
-    showToast("Plage appliquée");
+    showToast(t(lang, "range_ok"));
   };
 
   const applyMassUpdate = async (payload: {
@@ -292,22 +312,32 @@ export default function DesktopApp() {
   const archivePerson = async () => {
     if (!selectedPerson || !isAdmin) return;
     if (!confirm(`Archiver ${fullName(selectedPerson)} ?`)) return;
-    await fetch(`/api/personnel/${selectedPerson.id}`, {
+    const res = await fetch(`/api/personnel/${selectedPerson.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "archive" }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast((err as { error?: string }).error ?? t(lang, "save_failed"), { error: true });
+      return;
+    }
     setSelectedPerson(null);
     loadInitial();
   };
 
   const reactivatePerson = async () => {
     if (!selectedPerson || !isAdmin) return;
-    await fetch(`/api/personnel/${selectedPerson.id}`, {
+    const res = await fetch(`/api/personnel/${selectedPerson.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "reactivate" }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast((err as { error?: string }).error ?? t(lang, "save_failed"), { error: true });
+      return;
+    }
     loadInitial();
     setAdminMsg("Collaborateur réactivé");
     setTimeout(() => setAdminMsg(null), 3000);
@@ -357,20 +387,20 @@ export default function DesktopApp() {
   const teamMembersForMass = monthly?.teamMembers ?? weekly?.teamMembers ?? [];
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-[#00205b] font-bold">
-        {t(lang, "loading")}
-      </div>
-    );
+    return <LoadingSkeleton lang={lang} />;
+  }
+
+  if (accessDenied) {
+    return <AccessDenied lang={lang} message={error} />;
   }
 
   if (error || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="glass rounded-3xl p-8 max-w-lg text-center">
-          <p className="text-red-600 font-semibold mb-4">{error}</p>
-          <button type="button" onClick={() => signOut()} className="text-sm underline">
-            {t(lang, "logout")}
+          <p className="text-red-600 font-semibold mb-4">{error ?? t(lang, "save_failed")}</p>
+          <button type="button" onClick={() => void loadInitial()} className="px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold">
+            {t(lang, "mobile_retry")}
           </button>
         </div>
       </div>

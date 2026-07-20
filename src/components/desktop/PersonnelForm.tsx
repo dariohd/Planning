@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { InitialData, PersonnelRecord } from "@/lib/types";
 import { fullName } from "@/lib/personnel";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 const ROLES_PROD = ["REAP", "Compagnon", "Intérimaire", "Pilote", "Apprenti Atelier"];
 const ROLES_SUPPORT = ["RP", "REAP", "MFT", "Apprenti", "Responsable Preparateur", "Préparateur", "Responsable Qualité", "Qualité"];
@@ -43,11 +44,15 @@ export function PersonnelForm({ open, data, person, workstations = [], onSaved, 
 
   const [tab, setTab] = useState<"hierarchy" | "planning">("hierarchy");
   const [form, setForm] = useState(() => defaultForm(person));
+  const [formError, setFormError] = useState<string | null>(null);
+  const handleClose = useCallback(() => onClose(), [onClose]);
+  const dialogRef = useModalA11y(open, handleClose);
 
   if (!open) return null;
 
   const submit = async () => {
     if (!form.nom || !form.prenom) return;
+    setFormError(null);
     if (!person) {
       const dupRes = await fetch(`/api/personnel/check-duplicate?nom=${encodeURIComponent(form.nom)}&prenom=${encodeURIComponent(form.prenom)}&matricule=${encodeURIComponent(form.matricule)}`);
       const dup = await dupRes.json();
@@ -67,21 +72,42 @@ export function PersonnelForm({ open, data, person, workstations = [], onSaved, 
       responsableHierarchique: form.responsableHierarchique || null,
     };
     const res = await fetch("/api/personnel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    if (res.ok) { onSaved(); onClose(); }
+    if (res.ok) {
+      onSaved();
+      onClose();
+      return;
+    }
+    const err = await res.json().catch(() => ({}));
+    setFormError((err as { error?: string }).error ?? "Enregistrement du collaborateur échoué");
   };
 
   const remove = async () => {
     if (!person || !confirm(`Supprimer ${fullName(person)} ? Cette action est irréversible.`)) return;
+    setFormError(null);
     const res = await fetch(`/api/personnel/${person.id}`, { method: "DELETE" });
-    if (res.ok) { onSaved(); onClose(); }
+    if (res.ok) {
+      onSaved();
+      onClose();
+      return;
+    }
+    const err = await res.json().catch(() => ({}));
+    setFormError((err as { error?: string }).error ?? "Suppression échouée");
   };
 
   const set = (key: string, value: string | number) => setForm((f) => ({ ...f, [key]: value }));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="glass rounded-3xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-black text-[#00205b] mb-4">{isEdit ? "Modifier" : "Ajouter"} un collaborateur</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={handleClose}>
+      <div
+        ref={dialogRef}
+        className="glass rounded-3xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto outline-none"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="personnel-form-title"
+        tabIndex={-1}
+      >
+        <h3 id="personnel-form-title" className="font-black text-[#00205b] mb-4">{isEdit ? "Modifier" : "Ajouter"} un collaborateur</h3>
         <div className="flex gap-2 mb-4">
           <button type="button" onClick={() => setTab("hierarchy")} className={`px-3 py-1 rounded-lg text-xs font-bold ${tab === "hierarchy" ? "bg-[#00205b] text-white" : "border"}`}>Hiérarchie</button>
           <button type="button" onClick={() => setTab("planning")} className={`px-3 py-1 rounded-lg text-xs font-bold ${tab === "planning" ? "bg-[#00205b] text-white" : "border"}`}>Planning</button>
@@ -110,6 +136,8 @@ export function PersonnelForm({ open, data, person, workstations = [], onSaved, 
           </div>
         )}
 
+        {formError && <p className="text-sm text-red-600 font-medium mb-3" role="alert">{formError}</p>}
+
         <div className="flex gap-2 justify-between">
           {isEdit && isAdmin ? (
             <button type="button" onClick={remove} className="px-4 py-2 rounded-xl border border-red-200 text-red-700 text-sm font-bold">Supprimer</button>
@@ -117,7 +145,7 @@ export function PersonnelForm({ open, data, person, workstations = [], onSaved, 
             <span />
           )}
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border text-sm font-bold">Annuler</button>
+            <button type="button" onClick={handleClose} className="px-4 py-2 rounded-xl border text-sm font-bold">Annuler</button>
             <button type="button" onClick={submit} disabled={!form.nom || !form.prenom} className="px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold disabled:opacity-40">Enregistrer</button>
           </div>
         </div>

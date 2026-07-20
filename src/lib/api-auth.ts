@@ -11,3 +11,12 @@ export async function requireSession() {
   }
   return { session };
 }
+
+export async function requireAdmin() {
+  const result = await requireSession();
+  if ("error" in result && result.error) return result;
+  if (result.session!.user!.role !== "Administrateur") {
+    return { error: NextResponse.json({ error: "Administrateur requis." }, { status: 403 }) };
+  }
+  return result;
+}

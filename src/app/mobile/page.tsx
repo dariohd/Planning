@@ -10,6 +10,7 @@ import { fullName } from "@/lib/personnel";
 import { t, type Lang } from "@/lib/i18n";
 import { MobilePresenceSheet } from "@/components/mobile/MobilePresenceSheet";
 import { LinkToDesktopView } from "@/components/shared/DeviceViewSwitch";
+import { AccessDenied } from "@/components/shared/AccessDenied";
 import { signOut } from "next-auth/react";
 import { useToast } from "@/components/shared/ToastProvider";
 
@@ -49,6 +50,8 @@ export default function MobileApp() {
   const { showToast } = useToast();
   const [lang, setLang] = useState<Lang>(() => getMobileLang());
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [accessDeniedMsg, setAccessDeniedMsg] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [absDay, setAbsDay] = useState(0);
   const [annualMonth, setAnnualMonth] = useState<number | null>(null);
@@ -65,7 +68,7 @@ export default function MobileApp() {
   const [annualPerson, setAnnualPerson] = useState<string | null>(null);
   const [yearPresences, setYearPresences] = useState<Record<string, DayPresence>>({});
   const touchStart = useRef<{ x: number; y: number; id: string; date: string } | null>(null);
-  const canEdit = data ? canUserEdit(data.currentUser.role) : false;
+  const canEdit = data ? canUserEdit(data.currentUser.role) && !offline : false;
 
   const sectors = useMemo(() => data?.settings.sectorsConfig ?? [], [data]);
   const selectionParam = useMemo(() => mapTeamSelectionForApi(selection, sectors), [selection, sectors]);
@@ -95,10 +98,22 @@ export default function MobileApp() {
 
   const load = useCallback(async () => {
     setLoadState((s) => (s === "ready" ? s : "loading"));
+    setAccessDenied(false);
+    setAccessDeniedMsg(null);
     try {
       const cacheKey = `planning-cache-${mode}`;
       const initRes = await fetch(`/api/initial-data?mode=${mode}`);
       const init = await initRes.json();
+      if (!initRes.ok) {
+        if (initRes.status === 403) {
+          setAccessDenied(true);
+          setAccessDeniedMsg(init.error ?? null);
+          setData(null);
+          setLoadState("error");
+          return;
+        }
+        throw new Error(init.error ?? "load failed");
+      }
       setData(init);
       setOffline(false);
       localStorage.setItem(cacheKey, JSON.stringify(init));
@@ -149,6 +164,10 @@ export default function MobileApp() {
 
   const savePresence = async (payload: { status: string; comment?: string; hs?: string; location?: string }) => {
     if (!sheet || !data) return;
+    if (offline) {
+      showToast(t(lang, "mobile_edit_blocked_offline"), { error: true });
+      return;
+    }
     const undo = {
       type: "details" as const,
       personnelId: sheet.id,
@@ -158,22 +177,36 @@ export default function MobileApp() {
       oldHs: sheet.details?.hs,
       oldLocation: sheet.details?.loc,
     };
-    await fetch("/api/presences/details", {
+    const res = await fetch("/api/presences/details", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ personnelId: sheet.id, date: sheet.date, status: payload.status, comment: payload.comment, hs: payload.hs, location: payload.location }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast((err as { error?: string }).error ?? t(lang, "save_failed"), { error: true });
+      return;
+    }
     setSheet(null);
     showToast(t(lang, "mobile_toast_saved"), { undo });
     load();
   };
 
   const quickSetStatus = async (personId: string, date: string, status: string, previousStatus: string) => {
-    await fetch("/api/presences/details", {
+    if (offline) {
+      showToast(t(lang, "mobile_edit_blocked_offline"), { error: true });
+      return;
+    }
+    const res = await fetch("/api/presences/details", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ personnelId: personId, date, status }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast((err as { error?: string }).error ?? t(lang, "save_failed"), { error: true });
+      return;
+    }
     showToast(t(lang, "mobile_toast_updated"), {
       undo: { type: "status", personnelId: personId, date, oldStatus: previousStatus },
     });
@@ -193,6 +226,10 @@ export default function MobileApp() {
   const absences = [...(workforce?.compagnons?.daily?.Ma ?? []), ...(workforce?.compagnons?.daily?.CP ?? [])];
   const pareto = Object.entries(indicators?.monthlyAbsenceBreakdown ?? {}).sort((a, b) => b[1] - a[1]);
   const year = new Date().getFullYear();
+
+  if (accessDenied) {
+    return <AccessDenied lang={lang} message={accessDeniedMsg} />;
+  }
 
   if (loadState === "loading" && !data) {
     return (
@@ -216,7 +253,7 @@ export default function MobileApp() {
   return (
     <div className="h-[100dvh] flex flex-col bg-[#f4f7f9] text-[#00205b]">
       {offline && (
-        <div className="bg-amber-100 text-amber-900 text-center text-[10px] font-bold py-1" role="status">{t(lang, "mobile_offline")}</div>
+        <div className="bg-amber-100 text-amber-900 text-center text-[10px] font-bold py-1" role="status">{t(lang, "mobile_offline_readonly")}</div>
       )}
       <MobilePresenceSheet
         open={!!sheet}

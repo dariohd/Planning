@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DISPLAY_POSTES } from "@/lib/constants";
 import { parseSectorsConfigText } from "@/lib/sectors";
 import { SHEETS_SYNC_ENABLED } from "@/lib/features";
 import { t, type Lang } from "@/lib/i18n";
+import { useModalA11y } from "@/hooks/useModalA11y";
 import { DeleteDataConfirmModal } from "./DeleteDataConfirmModal";
 import { StorageSwitchModal } from "./StorageSwitchModal";
 
@@ -48,6 +49,8 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
   const [year, setYear] = useState(new Date().getFullYear());
   const [archiveYear, setArchiveYear] = useState(new Date().getFullYear() - 1);
   const [missionsText, setMissionsText] = useState("Mi");
+  const handleClose = useCallback(() => onClose(), [onClose]);
+  const dialogRef = useModalA11y(open, handleClose);
   const [workstationsText, setWorkstationsText] = useState(DISPLAY_POSTES.join(", "));
   const [sectorsText, setSectorsText] = useState("[]");
   const [newRole, setNewRole] = useState("");
@@ -384,8 +387,16 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
         onConfirm={handleStorageSwitch}
       />
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose} role="presentation">
-        <div className="glass rounded-3xl p-5 max-w-xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={handleClose} role="presentation">
+        <div
+          ref={dialogRef}
+          className="glass rounded-3xl p-5 max-w-xl w-full max-h-[90vh] overflow-y-auto outline-none"
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="settings-title"
+          tabIndex={-1}
+        >
           <h3 id="settings-title" className="font-black text-[#00205b] mb-4">{t(lang, "settings_title")}</h3>
           {msg && <p className="text-xs font-bold text-[#00b5e2] mb-2" role="status">{msg}</p>}
           <div className="flex flex-wrap gap-1 mb-4" role="tablist" aria-label={t(lang, "settings_title")}>
@@ -701,7 +712,7 @@ export function SettingsModal({ open, isAdmin, lang, onClose, onGenerateYear }: 
           )}
 
           <div className="flex gap-2 justify-end">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border text-sm font-bold">{t(lang, "settings_close")}</button>
+            <button type="button" onClick={handleClose} className="px-4 py-2 rounded-xl border text-sm font-bold">{t(lang, "settings_close")}</button>
             {tab !== "actions" && tab !== "access" && (
               <button type="button" onClick={() => saveConfig(false)} className="px-4 py-2 rounded-xl bg-[#00205b] text-white text-sm font-bold">{t(lang, "settings_save")}</button>
             )}

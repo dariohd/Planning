@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/api-auth";
+import { requireAdmin } from "@/lib/api-auth";
 import { prisma } from "@/lib/db";
 import { touchLastModified } from "@/lib/permissions";
 import { z } from "zod";
 
 export async function GET() {
-  const authResult = await requireSession();
+  const authResult = await requireAdmin();
   if ("error" in authResult && authResult.error) return authResult.error;
-
-  if (authResult.session!.user!.role !== "Administrateur") {
-    return NextResponse.json({ error: "Administrateur requis." }, { status: 403 });
-  }
 
   const users = await prisma.user.findMany({
     orderBy: { email: "asc" },
@@ -32,12 +28,8 @@ const postSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireSession();
+  const authResult = await requireAdmin();
   if ("error" in authResult && authResult.error) return authResult.error;
-
-  if (authResult.session!.user!.role !== "Administrateur") {
-    return NextResponse.json({ error: "Administrateur requis." }, { status: 403 });
-  }
 
   const body = postSchema.parse(await req.json());
   const email = body.email.toLowerCase();
@@ -51,12 +43,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const authResult = await requireSession();
+  const authResult = await requireAdmin();
   if ("error" in authResult && authResult.error) return authResult.error;
-
-  if (authResult.session!.user!.role !== "Administrateur") {
-    return NextResponse.json({ error: "Administrateur requis." }, { status: 403 });
-  }
 
   const body = patchSchema.parse(await req.json());
   const updated = await prisma.user.update({
