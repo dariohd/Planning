@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/bulle/:path*",
-        destination: "https://bulle-chatbot.vercel.app/api/:path*",
+        destination: "https://bullechatbot.vercel.app/api/:path*",
       },
     ];
   },

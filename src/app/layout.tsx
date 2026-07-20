@@ -3,7 +3,7 @@ import { Providers } from "@/components/Providers";
 import { BulleWidget } from "@/components/BulleWidget";
 import "./globals.css";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://planning-black-xi.vercel.app";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://planning-tristan.vercel.app";
 
 export const metadata: Metadata = {
   title: "Planning Présence",

@@ -9,8 +9,8 @@ L'archive d'origine (GAS) est figée dans `../PlanningGS`.
 **Production** (mêmes déploiements, domaines du projet) :
 
 - https://planning-tristan.vercel.app *(URL recommandée)*
-- https://planning-presence-atelier.vercel.app
-- https://planning-black-xi.vercel.app
+- https://planning-tristan.vercel.app
+- https://planning-tristan.vercel.app
 - https://planning-dariohprojects.vercel.app
 
 ## Stack
@@ -139,7 +139,7 @@ Le script `vercel-build` applique le schéma Prisma et seed si base vide.
 
 Variables Vercel requises : `DATABASE_URL`, `AUTH_SECRET`, `DEMO_USERNAME`, `DEMO_PASSWORD`, `DEMO_USER_ROLE`.
 
-`AUTH_URL` et `NEXT_PUBLIC_APP_URL` doivent être l'URL de production exacte (`https://planning-black-xi.vercel.app`), sans caractère BOM en tête.
+`AUTH_URL` et `NEXT_PUBLIC_APP_URL` doivent être l'URL de production exacte (`https://planning-tristan.vercel.app`), sans caractère BOM en tête.
 
 Ne jamais committer `SEED_SECRET`, `DEMO_PASSWORD` ou `DATABASE_URL` dans le dépôt.
 

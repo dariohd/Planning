@@ -7,7 +7,7 @@ export function BulleWidget() {
 
   return (
     <Script
-      src="https://bulle-chatbot.vercel.app/widget/bulle.js"
+      src="https://bullechatbot.vercel.app/widget/bulle.js"
       data-site-key={siteKey}
       data-proxy="same-origin"
       data-primary-color="#00205b"

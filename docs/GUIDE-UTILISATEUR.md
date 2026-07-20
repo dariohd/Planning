@@ -2,8 +2,8 @@
 
 **URLs de production (équivalentes) :**
 
-- https://planning-presence-atelier.vercel.app/login
-- https://planning-black-xi.vercel.app/login
+- https://planning-tristan.vercel.app/login
+- https://planning-tristan.vercel.app/login
 - https://planning-dariohprojects.vercel.app/login
 
 ---
